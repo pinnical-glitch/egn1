@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { HomeForm, LoadsForm, SolarForm, BatteryForm } from './components/forms';
 import { ScorecardRow, SocChart, EnergyBalanceChart, SolarCurveChart, LoadBreakdownChart, AssumptionsPanel } from './components/dashboard';
 import { runSimulation } from './engine/index.js';
-import { getDefaultClimateZone } from './engine/climateZones.js';
+import { getDefaultClimateZone, getClimateZone } from './engine/climateZones.js';
 import { DEFAULT_APPLIANCES } from './engine/appliances.js';
 
 const CheckIcon = ({ className }) => (
@@ -60,7 +60,7 @@ function App() {
     if (currentStep === 'results') {
       runSimulationAsync();
     }
-  }, [currentStep, config]);
+  }, [currentStep]);
 
   const runSimulationAsync = async () => {
     setIsSimulating(true);
@@ -71,7 +71,7 @@ function App() {
         appliances: config.loads.appliances,
         solar: config.solar,
         battery: config.battery,
-        climateZone: getDefaultClimateZone(),
+        climateZone: getClimateZone(config.home.climateZone),
         blackoutHours: config.home.blackoutHours,
         blackoutsPerYear: config.home.blackoutsPerYear,
       };

@@ -18,12 +18,15 @@ export default function BatteryForm({ config, onChange }) {
     if (config.chemistry) {
       const chemistry = BATTERY_CHEMISTRY[config.chemistry.toUpperCase()];
       if (chemistry) {
-        // Only update if values haven't been manually changed
+        const newConfig = { ...config };
         if (config.maxDoD === undefined || config.maxDoD === BATTERY_CHEMISTRY.LFP.defaultMaxDoD) {
-          handleChange('maxDoD', chemistry.defaultMaxDoD);
+          newConfig.maxDoD = chemistry.defaultMaxDoD;
         }
         if (config.roundTripEfficiency === undefined || config.roundTripEfficiency === BATTERY_CHEMISTRY.LFP.defaultRoundTripEfficiency) {
-          handleChange('roundTripEfficiency', chemistry.defaultRoundTripEfficiency);
+          newConfig.roundTripEfficiency = chemistry.defaultRoundTripEfficiency;
+        }
+        if (newConfig.maxDoD !== config.maxDoD || newConfig.roundTripEfficiency !== config.roundTripEfficiency) {
+          onChange(newConfig);
         }
       }
     }
