@@ -145,13 +145,10 @@ export function calculatePeukertAdjustedCapacity(
  * 
  * @param {number} capacityKwh - Battery capacity in kWh
  * @param {number} cRate - C-rate limit (e.g., 0.5 for 0.5C)
- * @param {number} nominalVoltageV - Nominal system voltage
  * @returns {number} Maximum power in watts
  */
-export function calculateCRateLimit(capacityKwh, cRate, nominalVoltageV = 48) {
-  // Power = C-rate × Capacity × Voltage / 1000 (convert to kW then W)
-  // Actually: Power = C-rate × Capacity (kWh) × 1000 (to Wh) / 1 hour
-  // Simplified: Power (W) = C-rate × Capacity (kWh) × 1000
+export function calculateCRateLimit(capacityKwh, cRate) {
+  // Power (W) = C-rate × Capacity (kWh) × 1000
   return cRate * capacityKwh * 1000;
 }
 
@@ -292,8 +289,8 @@ export function simulateSOC({
   const minSocKwh = effectiveCapacityKwh * (1 - maxDoD);
   
   // Calculate C-rate limits in watts
-  const maxChargeW = applyCRateLimits ? calculateCRateLimit(nameplateKwh, chargeRateLimit, nominalVoltageV) : Infinity;
-  const maxDischargeW = applyCRateLimits ? calculateCRateLimit(nameplateKwh, dischargeRateLimit, nominalVoltageV) : Infinity;
+  const maxChargeW = applyCRateLimits ? calculateCRateLimit(nameplateKwh, chargeRateLimit) : Infinity;
+  const maxDischargeW = applyCRateLimits ? calculateCRateLimit(nameplateKwh, dischargeRateLimit) : Infinity;
   
   for (let hour = 0; hour < blackoutHours; hour++) {
     const hourOfDay = hour % 24;

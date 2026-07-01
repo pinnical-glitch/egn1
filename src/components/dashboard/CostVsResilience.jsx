@@ -497,6 +497,7 @@ export default function CostVsResilience({ results, config }) {
 function estimateSurvivalHours(solarPanels, panelWattage, batteryKwh, config) {
   // Get average load from appliances
   const avgLoadW = config.loads.appliances.reduce((sum, a) => sum + a.ratedWatts, 0) / 24;
+  if (avgLoadW <= 0) return 0;
   
   // Estimate solar production (simplified)
   const solarProductionWh = solarPanels * panelWattage * 4.5 * 0.86; // PSH × derate

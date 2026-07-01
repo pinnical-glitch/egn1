@@ -68,33 +68,32 @@ function App() {
 
   useEffect(() => {
     if (currentStep === 'results') {
+      const runSimulationAsync = async () => {
+        setIsSimulating(true);
+        setErrors({});
+        try {
+          await new Promise(resolve => setTimeout(resolve, 300));
+          const simulationConfig = {
+            appliances: config.loads.appliances,
+            solar: config.solar,
+            battery: config.battery,
+            climateZone: getClimateZone(config.home.climateZone),
+            blackoutHours: config.home.blackoutHours,
+            blackoutsPerYear: config.home.blackoutsPerYear,
+            advancedPhysics: config.advanced,
+          };
+          const simResults = runSimulation(simulationConfig);
+          setResults(simResults);
+        } catch (err) {
+          console.error('Simulation error:', err);
+          setErrors({ simulation: 'Failed to run simulation. Please check your inputs.' });
+        } finally {
+          setIsSimulating(false);
+        }
+      };
       runSimulationAsync();
     }
-  }, [currentStep]);
-
-  const runSimulationAsync = async () => {
-    setIsSimulating(true);
-    setErrors({});
-    try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      const simulationConfig = {
-        appliances: config.loads.appliances,
-        solar: config.solar,
-        battery: config.battery,
-        climateZone: getClimateZone(config.home.climateZone),
-        blackoutHours: config.home.blackoutHours,
-        blackoutsPerYear: config.home.blackoutsPerYear,
-        advancedPhysics: config.advanced,
-      };
-      const simResults = runSimulation(simulationConfig);
-      setResults(simResults);
-    } catch (err) {
-      console.error('Simulation error:', err);
-      setErrors({ simulation: 'Failed to run simulation. Please check your inputs.' });
-    } finally {
-      setIsSimulating(false);
-    }
-  };
+  }, [currentStep, config]);
 
   const handleConfigChange = (section, newConfig) => {
     setConfig(prev => ({ ...prev, [section]: newConfig }));

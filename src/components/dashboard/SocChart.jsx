@@ -36,7 +36,7 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-export default function SocChart({ results, config }) {
+export default function SocChart({ results }) {
   if (!results) return null;
 
   const { allLoads, criticalLoads, usableCapacityKwh, config: simConfig } = results;

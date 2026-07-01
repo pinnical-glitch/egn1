@@ -15,47 +15,6 @@
           fontFamily: {
             sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
           },
-          colors: {
-            primary: {
-              50: '#eff6ff',
-              100: '#dbeafe',
-              200: '#bfdbfe',
-              300: '#93c5fd',
-              400: '#60a5fa',
-              500: '#3b82f6',
-              600: '#2563eb',
-              700: '#1d4ed8',
-              800: '#1e40af',
-              900: '#1e3a8a',
-              950: '#172554',
-            },
-            secondary: {
-              50: '#f0fdfa',
-              100: '#ccfbf1',
-              200: '#99f6e4',
-              300: '#5eead4',
-              400: '#2dd4bf',
-              500: '#14b8a6',
-              600: '#0d9488',
-              700: '#0f766e',
-              800: '#115e59',
-              900: '#134e4a',
-              950: '#042f2e',
-            },
-            accent: {
-              50: '#fffbeb',
-              100: '#fef3c7',
-              200: '#fde68a',
-              300: '#fcd34d',
-              400: '#fbbf24',
-              500: '#f59e0b',
-              600: '#d97706',
-              700: '#b45309',
-              800: '#92400e',
-              900: '#78350f',
-              950: '#451a03',
-            },
-          },
         },
       },
     }
@@ -68,13 +27,6 @@
     html { scroll-behavior: smooth; }
     body { font-family: 'Inter', sans-serif; }
     button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
-    .transition { transition: all 0.2s ease; }
-    .cursor-pointer { transition: all 0.15s ease; }
-    .cursor-pointer:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-    .bg-white { background-color: white; }
-    .shadow { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1); }
-    .shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
-    .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1); }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .animate-fade-in { animation: fadeIn 0.5s ease-out; }
     button:not(:disabled):active { transform: scale(0.98); }
@@ -128,82 +80,207 @@ const ZONES=[
   {id:"us_mtn",name:"US Mountain",desc:"Colorado/Utah",psh:5.5,tmp:8,rng:[-15,32]}
 ];
 
+// Phase 2: Enhanced chemistry with Peukert, C-rate, calendar aging, temp slope
 const CHEM={
-  lfp:{id:"lfp",name:"Lithium (LFP)",dod:0.92,rte:0.95,l80:4500,l50:6000},
-  lead:{id:"lead",name:"Lead-Acid",dod:0.50,rte:0.82,l80:200,l50:400}
+  lfp:{id:"lfp",name:"Lithium (LFP)",dod:0.92,rte:0.95,l80:4500,l50:6000,peukert:1.05,cr:0.5,calFade:0.02,tempSlope:0.008},
+  lead:{id:"lead",name:"Lead-Acid",dod:0.50,rte:0.82,l80:200,l50:400,peukert:1.25,cr:0.2,calFade:0.05,tempSlope:0.012}
 };
 
-const TL={"S_30":1,"S_0":0.85,"S_45":0.95,"SE_30":0.92,"SE_0":0.82,"SW_30":0.92,"SW_0":0.82,"E_30":0.85,"E_0":0.78,"W_30":0.85,"W_0":0.78,"N_30":0.65,"N_0":0.6};
-const tiltD=(o,t)=>{const k=t<=10?"0":t<=37?"30":t<=67?"45":"90";return TL[o+"_"+k]||0.85};
-const tempD=t=>1-0.004*Math.max(0,t+20-25);
-const arrPow=(n,w,td,od)=>n*w*td*od*0.86;
+// Phase 2: Enhanced tilt lookup with 15° increments and interpolation
+const TL={"S_0":0.85,"S_15":0.93,"S_30":1.0,"S_45":0.98,"S_60":0.93,"S_75":0.86,"S_90":0.70,"SE_0":0.82,"SE_15":0.87,"SE_30":0.92,"SE_45":0.90,"SE_60":0.85,"SE_75":0.78,"SE_90":0.65,"SW_0":0.82,"SW_15":0.87,"SW_30":0.92,"SW_45":0.90,"SW_60":0.85,"SW_75":0.78,"SW_90":0.65,"E_0":0.78,"E_15":0.82,"E_30":0.85,"E_45":0.80,"E_60":0.74,"E_75":0.68,"E_90":0.65,"W_0":0.78,"W_15":0.82,"W_30":0.85,"W_45":0.80,"W_60":0.74,"W_75":0.68,"W_90":0.65,"N_0":0.60,"N_15":0.58,"N_30":0.65,"N_45":0.55,"N_60":0.48,"N_75":0.42,"N_90":0.50};
+const tiltD=(o,t)=>{
+  const bp=[0,15,30,45,60,75,90];
+  let li=0,hi=bp.length-1;
+  for(let i=0;i<bp.length-1;i++){if(t>=bp[i]&&t<=bp[i+1]){li=i;hi=i+1;break;}}
+  const t0=bp[li],t1=bp[hi];
+  const d0=TL[o+"_"+t0]||0.85,d1=TL[o+"_"+t1]||0.85;
+  return t0===t1?d0:d0+(d1-d0)*(t-t0)/(t1-t0);
+};
+
+// Phase 2: NOCT-based cell temperature model
+const cellTemp=(amb,irr=800,noct=45)=>amb+(noct-20)/800*irr;
+const tempD=(amb,irr=800,noct=45,tc=-0.0038)=>{
+  const ct=cellTemp(amb,irr,noct);
+  return Math.max(0,1+tc*Math.max(0,ct-25));
+};
+
+// Phase 2: Named sub-derates (multiply to ~0.86)
+const SUB_DERATES={wiring:0.98,soiling:0.98,mismatch:0.98,availability:0.97,degradation:0.9985};
+
+const arrPow=(n,w,td,od,sub)=>{
+  const sd=sub||SUB_DERATES;
+  const total=Object.values(sd).reduce((a,v)=>a*v,1);
+  return n*w*td*od*total;
+};
+const arrPowLegacy=(n,w,td,od)=>n*w*td*od*0.86;
+
+// Phase 2: Seasonal multiplier
+const SEASON_M={winter:0.65,spring:0.85,summer:1.0,fall:0.80};
+const seasonalPSH=(base,season)=>base*(SEASON_M[season]||1);
+
+// Phase 2: Cloud attenuation (Beta-distributed)
+const CLOUD={clear:{a:2,b:8},typical:{a:3,b:6},poor:{a:3,b:3}};
+function sampleBeta(a,b){let x,y;do{x=Math.pow(Math.random(),1/a);y=Math.pow(Math.random(),1/b);}while(x+y>1);return x/(x+y);}
+const cloudAtten=(val,scenario)=>{const p=CLOUD[scenario]||CLOUD.typical;return val*(1-sampleBeta(p.a,p.b));};
+
+// Phase 2: Seasonal daylight hours
+const seasonDaylight=(season)=>{
+  const adj={winter:-1.5,spring:0,summer:1.5,fall:0};
+  const a=adj[season]||0;
+  return{sunrise:Math.max(4,Math.min(8,6-a)),sunset:Math.max(16,Math.min(20,18+a))};
+};
+
 const daySolar=(p,psh)=>p*psh;
-const solarCurve=(tot)=>{
+const solarCurve=(tot,sunrise=6,sunset=20)=>{
   const o=new Array(24).fill(0);
-  const rise=6,set=20,dl=set-rise;
-  const pk=tot/(dl*0.6366);
+  const dl=sunset-sunrise;
+  if(dl<=0||tot<=0)return o;
+  const pk=tot/(dl*Math.PI/2);
   for(let h=0;h<24;h++){
-    if(h>=rise&&h<=set){
-      const t=(h-rise)/dl;
+    if(h>=sunrise&&h<=sunset){
+      const t=(h-sunrise)/dl;
       o[h]=pk*Math.pow(Math.sin(Math.PI*t),2);
     }
   }
   return o;
 };
+
 const totalL=a=>a.reduce((s,x)=>s+x.w,0);
 const peakL=a=>{const r=totalL(a);const mt=a.filter(x=>x.m);return r+(mt.length?Math.max(...mt.map(x=>x.s-x.w)):0)};
 const dailyD=a=>a.reduce((s,x)=>s+x.w*x.h,0);
 const byP=a=>{const d={Critical:0,Important:0,Optional:0};a.forEach(x=>{d[x.p]=(d[x.p]||0)+x.w*x.h});return d};
 const byC=a=>{const b={};a.forEach(x=>{(b[x.cat]=b[x.cat]||0)+x.w*x.h});return b};
 
-const simSOC=({cap,dod,rte,solar,load,hrs})=>{
-  const r={soc:[],chg:0,dis:0,dep:null};
-  let soc=cap;const mn=cap*(1-dod);
+// Phase 2: Peukert-adjusted capacity
+const peukertCap=(rated,loadW,volt=48,k=1.05)=>{
+  const iRated=(rated*1000)/(volt*20);
+  const iActual=loadW/volt;
+  if(iActual<=0||iRated<=0)return rated;
+  return rated*Math.max(0.5,Math.min(1.5,Math.pow(iRated/iActual,k-1)));
+};
+
+// Phase 2: Battery temp derate
+const batTempDerate=(amb,slope=0.008,ref=25)=>amb>=ref?1:Math.max(0.5,1-slope*(ref-amb));
+
+// Phase 2: C-rate limit in watts
+const cRateW=(capKwh,cr)=>cr*capKwh*1000;
+
+// Phase 2: Enhanced SOC with Peukert, C-rate, temp
+const simSOC=({cap,nameplate,dod,rte,solar,load,hrs,volt=48,peukertK=1.05,crCh=0.5,crDis=0.5,ambTemp=25,tempSlope=0.008,usePeukert=true,useCRate=true,useTemp=true})=>{
+  const r={soc:[],chg:0,dis:0,dep:null,unmet:0,peukCap:[]};
+  const npt=nameplate||cap/dod;
+  const tempD=useTemp?batTempDerate(ambTemp,tempSlope):1;
+  const effCap=cap*tempD;
+  let soc=effCap;
+  const maxCh=useCRate?cRateW(npt,crCh):Infinity;
+  const maxDis=useCRate?cRateW(npt,crDis):Infinity;
   for(let h=0;h<hrs;h++){
     const hod=h%24;
     const s=solar[hod]||0;
     const l=load[hod]||0;
     const net=s-l;
+    let curCap=effCap;
+    if(usePeukert&&l>0)curCap=peukertCap(npt,l,volt,peukertK)*tempD;
+    const mn=curCap*(1-dod);
+    let chgWh=0,disWh=0,unmet=0;
     if(net>0){
-      const ch=Math.min(net*rte/1000,cap-soc);
-      soc+=ch;r.chg+=ch*1000;
+      const into=net*rte;
+      const chW=Math.min(maxCh,into);
+      const chK=Math.min(chW/1000,curCap-soc);
+      soc+=Math.max(0,chK);chgWh=Math.max(0,chK)*1000;
+      if(into>maxCh)unmet=into-maxCh;
     }else{
-      const d=Math.min(Math.abs(net)/1000,soc-mn);
-      soc-=d;r.dis+=d*1000;
+      const def=Math.abs(net);
+      const disW=Math.min(maxDis,def);
+      const disK=Math.min(disW/1000,soc-mn);
+      soc-=Math.max(0,disK);disWh=Math.max(0,disK)*1000;
+      if(def>maxDis)unmet=def-maxDis;
     }
-    soc=Math.max(mn,Math.min(cap,soc));
-    r.soc.push(soc);
+    soc=Math.max(mn,Math.min(curCap,soc));
+    r.soc.push(soc);r.chg+=chgWh;r.dis+=disWh;r.unmet+=unmet;r.peukCap.push(curCap);
     if(soc<=mn+0.01&&r.dep===null){
       let sus=true;
       for(let f=h+1;f<Math.min(h+24,hrs);f++){
-        if((solar[f%24]||0)>=(load[f%24]||0)){sus=false;break}
+        if((solar[f%24]||0)>=(load[f%24]||0)){sus=false;break;}
       }
       if(sus)r.dep=h+1;
     }
   }
   if(r.dep===null)r.dep=hrs;
+  r.physics={tempD,effCap,maxCh,maxDis};
   return r;
 };
 
-const degrad=(dis,cap,cid,dod,bpy)=>{
+// Phase 2: Enhanced degradation with calendar aging
+const degrad=(dis,cap,cid,dod,bpy,yrs=10)=>{
   const c=CHEM[cid]||CHEM.lfp;
   const cpe=dis/(cap*1000);
   let life=dod>=0.8?c.l80:dod<=0.5?c.l50:c.l50+((dod-0.5)/0.3)*(c.l80-c.l50);
-  return{cpe,life,cpy:cpe*bpy,yrs:life/(cpe*bpy)};
+  const cpy=cpe*bpy;
+  const proj=[];
+  let ret=1;
+  for(let y=0;y<=yrs;y++){
+    const cycleFade=cpy/life;
+    const calFade=c.calFade;
+    ret*=(1-cycleFade)*(1-calFade);
+    const r=Math.max(0.3,ret);
+    proj.push({year:y,ret:r,cap:cap*r});
+  }
+  const y80=proj.find(p=>p.ret<=0.8)?.year||yrs;
+  const y50=proj.find(p=>p.ret<=0.5)?.year||yrs;
+  return{cpe,life,cpy,yrs:life/cpy,calFade:c.calFade,y80,y50,proj};
+};
+
+// Phase 2: Cost calculation
+const calcCost=(panels,pw,batKwh,cfg)=>{
+  const sCost=cfg.solarPerW||2.75;
+  const bCost=cfg.batPerKwh||900;
+  const bos=cfg.bosPct||17.5;
+  const solar=panels*pw*sCost;
+  const battery=batKwh*bCost;
+  const sub=solar+battery;
+  return{solar,battery,bos:sub*bos/100,total:sub+sub*bos/100};
+};
+const estSurvival=(panels,pw,batKwh,cfg)=>{
+  const avgW=cfg.avgLoad||500;
+  const solarWh=panels*pw*4.5*0.86;
+  const batH=(batKwh*1000)/avgW;
+  const solH=solarWh/avgW;
+  return Math.min(batH+solH*0.3,200);
 };
 
 const runSim=cfg=>{
-  const{apps,solar:s,battery:b,zone:z,hrs,bpy}=cfg;
+  const{apps,solar:s,battery:b,zone:z,hrs,bpy,adv}=cfg;
   const tL=totalL(apps),pL=peakL(apps),dD=dailyD(apps),bP=byP(apps),bC=byC(apps);
-  const td=tempD(z.tmp),od=tiltD(s.ori,s.tilt),ap=arrPow(s.cnt,s.w,td,od);
-  const ds=daySolar(ap,z.psh),sc=solarCurve(ds);
-  const ch=CHEM[b.chem]||CHEM.lfp,us=b.cap*b.dod;
+  const season=adv.season||"summer";
+  const cloud=adv.cloud||"typical";
+  const noct=adv.noct||45;
+  const tc=adv.tc||-0.0038;
+  const invEff=adv.invEff||0.95;
+  const useAdv=adv.useAdv||false;
+  const subDr=adv.subDr||null;
+  const td=tempD(z.tmp,800,noct,tc);
+  const od=tiltD(s.ori,s.tilt);
+  let ap;
+  if(useAdv&&subDr)ap=arrPow(s.cnt,s.w,td,od,subDr);
+  else ap=arrPowLegacy(s.cnt,s.w,td,od);
+  const adjPSH=seasonalPSH(z.psh,season);
+  let ds=daySolar(ap,adjPSH);
+  ds=cloudAtten(ds,cloud);
+  const dl=seasonDaylight(season);
+  let sc=solarCurve(ds,dl.sunrise,dl.sunset);
+  sc=sc.map(w=>w*invEff);
+  const ch=CHEM[b.chem]||CHEM.lfp;
+  const us=b.cap*b.dod;
   const lp=new Array(24).fill(dD/24);
-  const al=simSOC({cap:us,dod:b.dod,rte:b.rte,solar:sc,load:lp,hrs});
+  const socCfg={cap:us,nameplate:b.cap,dod:b.dod,rte:b.rte,solar:sc,load:lp,hrs:hrs,
+    peukertK:ch.peukert,crCh:ch.cr,crDis:ch.cr,ambTemp:z.tmp,tempSlope:ch.tempSlope,
+    usePeukert:adv.usePeukert!==false,useCRate:adv.useCRate!==false,useTemp:adv.useTemp!==false};
+  const al=simSOC(socCfg);
   const ca=apps.filter(a=>a.p==="Critical"),cd=dailyD(ca),cl2=new Array(24).fill(cd/24);
-  const cl=simSOC({cap:us,dod:b.dod,rte:b.rte,solar:sc,load:cl2,hrs});
+  const cl=simSOC({...socCfg,load:cl2});
   const dg=degrad(al.dis,us,b.chem,b.dod,bpy);
-  return{tL,pL,dD,bP,bC,ap,ds,sc,td,od,us,ch,al,cl,dg,cfg:{apps,solar:s,battery:b,zone:z,hrs,bpy}};
+  return{tL,pL,dD,bP,bC,ap,ds,sc,td,od,us,ch,al,cl,dg,cfg:{apps,solar:s,battery:b,zone:z,hrs,bpy},season,cloud,adjPSH};
 };
 
 const STEPS=[
@@ -211,6 +288,7 @@ const STEPS=[
   {id:"loads",l:"Loads",d:"Appliances"},
   {id:"solar",l:"Solar",d:"Panels"},
   {id:"battery",l:"Battery",d:"Storage"},
+  {id:"advanced",l:"Physics",d:"Advanced",opt:true},
   {id:"results",l:"Results",d:"Output"}
 ];
 
@@ -218,12 +296,6 @@ function PrioBadge({p}){
   if(p==="Critical")return React.createElement("span",{className:"text-[10px] px-1 rounded bg-red-100 text-red-700"},"Critical");
   if(p==="Important")return React.createElement("span",{className:"text-[10px] px-1 rounded bg-amber-100 text-amber-700"},"Important");
   return React.createElement("span",{className:"text-[10px] px-1 rounded bg-gray-100 text-gray-600"},"Optional");
-}
-
-function PrioChip({p}){
-  if(p==="Critical")return React.createElement("span",{className:"inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"},"Critical");
-  if(p==="Important")return React.createElement("span",{className:"inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800"},"Important");
-  return React.createElement("span",{className:"inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700"},"Optional");
 }
 
 function HomeForm({cfg,set}){
@@ -432,6 +504,106 @@ function BatteryForm({cfg,set}){
   );
 }
 
+function AdvancedForm({cfg,set,chem}){
+  const[open,setOpen]=useState(false);
+  const[tab,setTab]=useState("solar");
+  const c=CHEM[chem]||CHEM.lfp;
+  const h=(k,v)=>set({...cfg,[k]:v});
+  return React.createElement("div",{className:"space-y-5"},
+    React.createElement("div",null,
+      React.createElement("h3",{className:"text-lg font-semibold text-gray-900"},"Advanced Physics"),
+      React.createElement("p",{className:"text-sm text-gray-600 mt-1"},"Fine-tune simulation. All values have sensible defaults.")
+    ),
+    React.createElement("div",{className:"bg-gray-50 rounded-lg p-4"},
+      React.createElement("button",{onClick:()=>setOpen(!open),className:"w-full flex items-center justify-between text-left"},
+        React.createElement("div",null,
+          React.createElement("span",{className:"font-medium text-gray-900"},(open?"Hide":"Show")+" Advanced Options"),
+          React.createElement("p",{className:"text-xs text-gray-500 mt-0.5"},"Optional: leave defaults for standard simulation")
+        ),
+        React.createElement("span",{className:"text-gray-400"},open?"▲":"▼")
+      )
+    ),
+    React.createElement("div",{className:"grid grid-cols-2 gap-4"},
+      React.createElement("div",null,
+        React.createElement("label",{className:"block text-sm font-medium text-gray-700 mb-1"},"Season"),
+        React.createElement("select",{value:cfg.season||"summer",onChange:e=>h("season",e.target.value),className:"w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"},
+          React.createElement("option",{value:"winter"},"Winter ~65%"),
+          React.createElement("option",{value:"spring"},"Spring ~85%"),
+          React.createElement("option",{value:"summer"},"Summer 100%"),
+          React.createElement("option",{value:"fall"},"Fall ~80%")
+        )
+      ),
+      React.createElement("div",null,
+        React.createElement("label",{className:"block text-sm font-medium text-gray-700 mb-1"},"Weather"),
+        React.createElement("select",{value:cfg.cloud||"typical",onChange:e=>h("cloud",e.target.value),className:"w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"},
+          React.createElement("option",{value:"clear"},"Clear ~20% loss"),
+          React.createElement("option",{value:"typical"},"Typical ~33% loss"),
+          React.createElement("option",{value:"poor"},"Poor ~50% loss")
+        )
+      )
+    ),
+    open&&React.createElement("div",{className:"space-y-3 border-t pt-3"},
+      React.createElement("div",{className:"flex gap-1 border-b border-gray-200"},
+        ["solar","battery","system"].map(t=>
+          React.createElement("button",{key:t,onClick:()=>setTab(t),className:"px-3 py-1.5 text-sm font-medium border-b-2 "+(tab===t?"border-blue-500 text-blue-600":"border-transparent text-gray-500")},t.charAt(0).toUpperCase()+t.slice(1))
+        )
+      ),
+      tab==="solar"&&React.createElement("div",{className:"space-y-3"},
+        React.createElement("div",{className:"grid grid-cols-2 gap-3"},
+          React.createElement("div",null,
+            React.createElement("label",{className:"block text-sm font-medium text-gray-700 mb-1"},"NOCT (°C)"),
+            React.createElement("input",{type:"number",value:cfg.noct||45,onChange:e=>h("noct",+e.target.value||45),min:35,max:55,className:"w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"})
+          ),
+          React.createElement("div",null,
+            React.createElement("label",{className:"block text-sm font-medium text-gray-700 mb-1"},"Temp Coeff (%/°C)"),
+            React.createElement("input",{type:"number",value:((cfg.tc||-0.0038)*100).toFixed(2),onChange:e=>h("tc",+e.target.value/100||-0.0038),step:0.01,className:"w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"})
+          )
+        ),
+        React.createElement("div",null,
+          React.createElement("label",{className:"block text-sm font-medium text-gray-700 mb-1"},"Inverter Eff: "+((cfg.invEff||0.95)*100).toFixed(0)+"%"),
+          React.createElement("input",{type:"range",value:(cfg.invEff||0.95)*100,onChange:e=>h("invEff",+e.target.value/100),min:85,max:98,step:0.5,className:"w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"})
+        )
+      ),
+      tab==="battery"&&React.createElement("div",{className:"space-y-3"},
+        React.createElement("div",{className:"flex items-center gap-2"},
+          React.createElement("input",{type:"checkbox",id:"up",checked:cfg.usePeukert!==false,onChange:e=>h("usePeukert",e.target.checked),className:"h-4 w-4 text-blue-600 rounded"}),
+          React.createElement("label",{htmlFor:"up",className:"text-sm text-gray-700"},"Peukert's Law (k="+((cfg.peukertK)||c.peukert).toFixed(2)+")")
+        ),
+        React.createElement("div",{className:"flex items-center gap-2"},
+          React.createElement("input",{type:"checkbox",id:"ucr",checked:cfg.useCRate!==false,onChange:e=>h("useCRate",e.target.checked),className:"h-4 w-4 text-blue-600 rounded"}),
+          React.createElement("label",{htmlFor:"ucr",className:"text-sm text-gray-700"},"C-Rate Limits ("+c.cr+"C)")
+        ),
+        React.createElement("div",{className:"flex items-center gap-2"},
+          React.createElement("input",{type:"checkbox",id:"utd",checked:cfg.useTemp!==false,onChange:e=>h("useTemp",e.target.checked),className:"h-4 w-4 text-blue-600 rounded"}),
+          React.createElement("label",{htmlFor:"utd",className:"text-sm text-gray-700"},"Temperature Derate")
+        )
+      ),
+      tab==="system"&&React.createElement("div",{className:"space-y-3"},
+        React.createElement("div",{className:"flex items-center gap-2 mb-2"},
+          React.createElement("input",{type:"checkbox",id:"ua",checked:cfg.useAdv||false,onChange:e=>h("useAdv",e.target.checked),className:"h-4 w-4 text-blue-600 rounded"}),
+          React.createElement("label",{htmlFor:"ua",className:"text-sm text-gray-700"},"Use individual sub-derates")
+        ),
+        !cfg.useAdv?
+          React.createElement("div",null,
+            React.createElement("label",{className:"block text-sm font-medium text-gray-700 mb-1"},"System Derate: "+(cfg.sysDerate||0.86).toFixed(2)),
+            React.createElement("input",{type:"range",value:(cfg.sysDerate||0.86)*100,onChange:e=>h("sysDerate",+e.target.value/100),min:80,max:90,step:0.5,className:"w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"})
+          ):
+          React.createElement("div",{className:"space-y-2"},
+            [{k:"wiring",l:"Wiring",d:0.98},{k:"soiling",l:"Soiling",d:0.98},{k:"mismatch",l:"Mismatch",d:0.98},{k:"availability",l:"Availability",d:0.97},{k:"degradation",l:"Degradation",d:0.9985}].map(item=>
+              React.createElement("div",{key:item.k},
+                React.createElement("label",{className:"block text-sm text-gray-700 mb-1"},item.k+": "+((cfg.subDr&&cfg.subDr[item.k])||item.d)*100+"%"),
+                React.createElement("input",{type:"range",value:((cfg.subDr&&cfg.subDr[item.k])||item.d)*100,onChange:e=>h("subDr",{...(cfg.subDr||{}),[item.k]:+e.target.value/100}),min:90,max:100,step:0.1,className:"w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"})
+              )
+            )
+          )
+      ),
+      React.createElement("div",{className:"bg-blue-50 rounded p-3 text-xs text-blue-800"},
+        "Defaults are based on NREL PVWatts, IEC 61215, and Peukert's Law. Only adjust if you have specific specs."
+      )
+    )
+  );
+}
+
 function Scorecards({r}){
   if(!r)return null;
   const cards=[
@@ -459,28 +631,20 @@ function Scorecards({r}){
 function ChartLine({data,color,w,h}){
   if(!data||!data.length)return null;
   const pad={t:15,r:15,b:25,l:40};
-  const cw=w-pad.l-pad.r;
-  const ch=h-pad.t-pad.b;
-  const mn=Math.min(...data);
-  const mx=Math.max(...data);
-  const range=mx-mn||1;
+  const cw=w-pad.l-pad.r;const ch=h-pad.t-pad.b;
+  const mn=Math.min(...data);const mx=Math.max(...data);const range=mx-mn||1;
   const pts=data.map((v,i)=>({x:pad.l+(i/(data.length-1))*cw,y:pad.t+ch-((v-mn)/range)*ch}));
   const path=pts.map((p,i)=>(i===0?"M":"L")+p.x+","+p.y).join(" ");
   return React.createElement("svg",{viewBox:"0 0 "+w+" "+h,className:"w-full h-auto"},
-    React.createElement("path",{d:path,fill:"none",stroke:color,strokeWidth:2}),
-    pts.filter((_,i)=>i%Math.max(1,Math.floor(data.length/6))===0||i===pts.length-1).map((p,i)=>
-      React.createElement("circle",{key:i,cx:p.x,cy:p.y,r:3,fill:color})
-    )
+    React.createElement("path",{d:path,fill:"none",stroke:color,strokeWidth:2})
   );
 }
 
 function ChartDual({d1,d2,l1,l2,c1,c2,dashed,w,h}){
   if(!d1||!d1.length)return null;
   const pad={t:15,r:15,b:25,l:40};
-  const cw=w-pad.l-pad.r;
-  const ch=h-pad.t-pad.b;
-  const all=[...d1,...d2];
-  const mn=Math.min(...all),mx=Math.max(...all),range=mx-mn||1;
+  const cw=w-pad.l-pad.r;const ch=h-pad.t-pad.b;
+  const all=[...d1,...d2];const mn=Math.min(...all),mx=Math.max(...all),range=mx-mn||1;
   const p1=d1.map((v,i)=>({x:pad.l+(i/(d1.length-1))*cw,y:pad.t+ch-((v-mn)/range)*ch}));
   const p2=d2.map((v,i)=>({x:pad.l+(i/(d2.length-1))*cw,y:pad.t+ch-((v-mn)/range)*ch}));
   const s1=p1.map((p,i)=>(i===0?"M":"L")+p.x+","+p.y).join(" ");
@@ -501,23 +665,15 @@ function ChartDual({d1,d2,l1,l2,c1,c2,dashed,w,h}){
 function ChartArea({solar,load,w,h}){
   if(!solar||!solar.length)return null;
   const pad={t:15,r:15,b:25,l:40};
-  const cw=w-pad.l-pad.r;
-  const ch=h-pad.t-pad.b;
+  const cw=w-pad.l-pad.r;const ch=h-pad.t-pad.b;
   const mx=Math.max(...solar,...load)*1.1||1;
   const mkA=(vals,col)=>{
     const pts=vals.map((v,i)=>({x:pad.l+(i/(vals.length-1))*cw,y:pad.t+ch-(v/mx)*ch}));
     const line=pts.map((p,i)=>(i===0?"M":"L")+p.x+","+p.y).join(" ");
-    return{line,area:line+" L"+pts[pts.length-1].x+","+pad.t+"h L"+pts[0].x+","+pad.t+" Z",pts,col};
+    return{line,area:line+" L"+pts[pts.length-1].x+","+pad.t+"h L"+pts[0].x+","+pad.t+" Z"};
   };
-  const sa=mkA(solar,"#fbbf24");
-  const la=mkA(load,"#ef4444");
-  // grid lines
-  const gridLines = [0,0.25,0.5,0.75,1];
-  const grid = gridLines.map(pct => ({
-    y: pad.t + ch - pct * ch,
-    label: Math.round(pct * mx)
-  }));
-  return React.createElement("svg",{viewBox:"0 0 "+w+" "+h,className:"w-full h-auto",role:"img","aria-label":"Hourly energy balance chart"},
+  const sa=mkA(solar);const la=mkA(load);
+  return React.createElement("svg",{viewBox:"0 0 "+w+" "+h,className:"w-full h-auto"},
     React.createElement("defs",null,
       React.createElement("linearGradient",{id:"sg",x1:0,y1:0,x2:0,y2:1},
         React.createElement("stop",{offset:"0%",stopColor:"#fbbf24",stopOpacity:0.7}),
@@ -527,11 +683,6 @@ function ChartArea({solar,load,w,h}){
         React.createElement("stop",{offset:"0%",stopColor:"#ef4444",stopOpacity:0.7}),
         React.createElement("stop",{offset:"100%",stopColor:"#ef4444",stopOpacity:0.1})
       )
-    ),
-    // grid
-    React.createElement("g",{className:"grid"},
-      grid.map((g,i) => React.createElement("line",{key:i,x1:pad.l,y1:g.y,x2:w-pad.r,y2:g.y,stroke:"#e2e8f0",strokeWidth:1,strokeDasharray:"4 4"})),
-      grid.map((g,i) => React.createElement("text",{key:"l"+i,x:pad.l-5,y:g.y+4,fontSize:9,fill:"#94a3b8",textAnchor:"end"},g.label))
     ),
     React.createElement("path",{d:la.area,fill:"url(#lg)"}),
     React.createElement("path",{d:sa.area,fill:"url(#sg)"}),
@@ -544,9 +695,8 @@ function ChartArea({solar,load,w,h}){
       React.createElement("line",{x1:5,y1:23,x2:18,y2:23,stroke:"#ef4444",strokeWidth:2}),
       React.createElement("text",{x:22,y:27,fontSize:10,fill:"#374151"},"Load")
     ),
-    // x-axis labels (every 6 hours)
-    React.createElement("g",{className:"x-axis"},
-      [0,6,12,18,24].map(hour => React.createElement("text",{key:hour,x:pad.l+(hour/24)*cw,y:h-5,fontSize:9,fill:"#94a3b8",textAnchor:"middle"},hour+"h"))
+    React.createElement("g",null,
+      [0,6,12,18,24].map(hour=>React.createElement("text",{key:hour,x:pad.l+(hour/24)*cw,y:h-5,fontSize:9,fill:"#94a3b8",textAnchor:"middle"},hour+"h"))
     )
   );
 }
@@ -557,13 +707,12 @@ function ChartPie({segs,w,h}){
   const cx=w/2,cy=h/2,r=Math.min(w,h)/2-10;
   let cum=0;
   const slices=segs.filter(s=>s.value>0).map(s=>{
-    const start=cum/total*Math.PI*2-Math.PI/2;
-    cum+=s.value;
+    const start=cum/total*Math.PI*2-Math.PI/2;cum+=s.value;
     const end=cum/total*Math.PI*2-Math.PI/2;
     const large=end-start>Math.PI?1:0;
     const x1=cx+r*Math.cos(start),y1=cy+r*Math.sin(start);
     const x2=cx+r*Math.cos(end),y2=cy+r*Math.sin(end);
-    return{path:"M"+cx+","+cy+" L"+x1+","+y1+" A"+r+","+r+" 0 "+large+" 1 "+x2+","+y2+" Z",color:s.color,name:s.name};
+    return{path:"M"+cx+","+cy+" L"+x1+","+y1+" A"+r+","+r+" 0 "+large+" 1 "+x2+","+y2+" Z",color:s.color};
   });
   return React.createElement("svg",{viewBox:"0 0 "+w+" "+h,className:"w-full h-auto max-w-[160px] mx-auto"},
     slices.map((s,i)=>React.createElement("path",{key:i,d:s.path,fill:s.color,stroke:"white",strokeWidth:2}))
@@ -579,8 +728,7 @@ function ChartBar({data,w,h}){
   const cols=["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#6b7280"];
   return React.createElement("svg",{viewBox:"0 0 "+w+" "+h,className:"w-full h-auto"},
     data.map((d,i)=>{
-      const y=pad.t+i*(bh+3);
-      const bw=(d.value/mx)*cw;
+      const y=pad.t+i*(bh+3);const bw=(d.value/mx)*cw;
       return React.createElement("g",{key:i},
         React.createElement("text",{x:pad.l-5,y:y+bh/2+4,textAnchor:"end",fontSize:11,fill:"#374151"},d.name),
         React.createElement("rect",{x:pad.l,y:y,width:bw,height:bh,fill:cols[i%cols.length],rx:3}),
@@ -590,24 +738,138 @@ function ChartBar({data,w,h}){
   );
 }
 
+// Phase 2: Cost vs Resilience scatter chart
+function CostScatter({data,w,h}){
+  if(!data||!data.length)return null;
+  const pad={t:25,r:25,b:40,l:60};
+  const cw=w-pad.l-pad.r;const ch=h-pad.t-pad.b;
+  const maxC=Math.max(...data.map(d=>d.cost))*1.1||1;
+  const maxH=Math.max(...data.map(d=>d.hours))*1.1||1;
+  const sx=c=>pad.l+(c/maxC)*cw;
+  const sy=h=>pad.t+ch-(h/maxH)*ch;
+  return React.createElement("svg",{viewBox:"0 0 "+w+" "+h,className:"w-full h-auto"},
+    React.createElement("rect",{x:pad.l+cw/2,y:pad.t,width:cw/2,height:ch/2,fill:"#f0fdf4",opacity:0.5}),
+    React.createElement("rect",{x:pad.l,y:pad.t,width:cw/2,height:ch/2,fill:"#fef2f2",opacity:0.3}),
+    [0,0.25,0.5,0.75,1].map(pct=>React.createElement("line",{key:pct,x1:pad.l,y1:pad.t+pct*ch,x2:pad.l+cw,y2:pad.t+pct*ch,stroke:"#e5e7eb",strokeDasharray:"4 4"})),
+    React.createElement("text",{x:w/2,y:h-5,fontSize:10,fill:"#6b7280",textAnchor:"middle"},"Cost ($)"),
+    React.createElement("text",{x:12,y:h/2,fontSize:10,fill:"#6b7280",textAnchor:"middle",transform:"rotate(-90,12,"+h/2+")"},"Survival (hrs)"),
+    data.map((p,i)=>React.createElement("g",{key:i},
+      React.createElement("circle",{cx:sx(p.cost),cy:sy(p.hours),r:p.custom?7:5,fill:p.color,stroke:"white",strokeWidth:2}),
+      React.createElement("text",{x:sx(p.cost),y:sy(p.hours)-10,fontSize:9,fill:"#374151",textAnchor:"middle",fontWeight:p.custom?"bold":"normal"},p.name),
+      React.createElement("text",{x:sx(p.cost),y:sy(p.hours)+14,fontSize:8,fill:"#6b7280",textAnchor:"middle"},(p.cost/1000).toFixed(1)+"k · "+p.hours.toFixed(0)+"h")
+    ))
+  );
+}
+
+function CostPanel({r,cfg}){
+  const[costCfg,setCostCfg]=useState({solarPerW:2.75,batPerKwh:900,bosPct:17.5});
+  const avgW=cfg.loads.apps.reduce((s,a)=>s+a.w,0)/24;
+  const presets=[
+    {id:"min",name:"Critical Minimal",panels:5,bat:5,color:"#ef4444"},
+    {id:"bal",name:"Balanced",panels:10,bat:10,color:"#f59e0b"},
+    {id:"full",name:"Full Home",panels:20,bat:20,color:"#10b981"}
+  ];
+  const myCost=calcCost(cfg.solar.cnt,cfg.solar.w,cfg.battery.cap,costCfg);
+  const myHours=r.al.dep;
+  const chartData=presets.map(p=>({...p,...calcCost(p.panels,cfg.solar.w,p.bat,costCfg),hours:estSurvival(p.panels,cfg.solar.w,p.bat,{...costCfg,avgW}),custom:false}));
+  chartData.push({id:"custom",name:"Your Config",cost:myCost.total,hours:myHours,color:"#3b82f6",custom:true});
+  return React.createElement("div",{className:"bg-white rounded-xl shadow border border-gray-100 p-4 space-y-4"},
+    React.createElement("h3",{className:"font-semibold text-gray-900"},"Cost vs Resilience"),
+    React.createElement("div",{className:"grid grid-cols-3 gap-3"},
+      React.createElement("div",null,
+        React.createElement("label",{className:"text-xs text-gray-600"},"Solar $/W"),
+        React.createElement("input",{type:"number",value:costCfg.solarPerW,onChange:e=>setCostCfg({...costCfg,solarPerW:+e.target.value||2.75}),step:0.25,className:"w-full px-2 py-1 text-sm border rounded"})
+      ),
+      React.createElement("div",null,
+        React.createElement("label",{className:"text-xs text-gray-600"},"Battery $/kWh"),
+        React.createElement("input",{type:"number",value:costCfg.batPerKwh,onChange:e=>setCostCfg({...costCfg,batPerKwh:+e.target.value||900}),step:50,className:"w-full px-2 py-1 text-sm border rounded"})
+      ),
+      React.createElement("div",null,
+        React.createElement("label",{className:"text-xs text-gray-600"},"BOS %"),
+        React.createElement("input",{type:"number",value:costCfg.bosPct,onChange:e=>setCostCfg({...costCfg,bosPct:+e.target.value||17.5}),step:2.5,className:"w-full px-2 py-1 text-sm border rounded"})
+      )
+    ),
+    React.createElement("div",{className:"border rounded-lg p-3"},React.createElement(CostScatter,{data:chartData,w:500,h:280})),
+    React.createElement("div",{className:"grid grid-cols-2 md:grid-cols-4 gap-3 text-sm"},
+      React.createElement("div",{className:"bg-blue-50 rounded p-2"},
+        React.createElement("div",{className:"font-medium text-blue-900"},"Your Config"),
+        React.createElement("div",{className:"font-mono text-blue-700"},"$"+myCost.total.toLocaleString()),
+        React.createElement("div",{className:"text-xs text-blue-600"},myHours.toFixed(1)+"h survival")
+      ),
+      presets.map(p=>{
+        const cost=calcCost(p.panels,cfg.solar.w,p.bat,costCfg);
+        return React.createElement("div",{key:p.id,className:"bg-gray-50 rounded p-2"},
+          React.createElement("div",{className:"font-medium text-gray-900"},p.name),
+          React.createElement("div",{className:"font-mono text-gray-700"},"$"+cost.total.toLocaleString()),
+          React.createElement("div",{className:"text-xs text-gray-600"},p.panels+" panels · "+p.bat+" kWh")
+        );
+      })
+    ),
+    React.createElement("div",{className:"bg-amber-50 rounded p-2 text-xs text-amber-800"},"Costs are national averages. Consult certified installers for quotes.")
+  );
+}
+
 function AssumptionsPanel({r}){
   const[open,setOpen]=useState(false);
+  const[sec,setSec]=useState({});
   if(!r)return null;
+  const toggle=s=>setSec(p=>({...p,[s]:!p[s]}));
+  const sections=[
+    {id:"solar",title:"Solar Irradiance & Derating",items:[
+      {n:"Cell Temp (NOCT)",f:"T_cell = T_ambient + (NOCT-20)/800 × Irradiance",d:"NOCT defaults to 45°C for standard panels."},
+      {n:"Temp Derate",f:"P = P_STC × [1 + temp_coeff × (T_cell - 25)]",d:"temp_coeff defaults to -0.0038/°C for monocrystalline."},
+      {n:"Seasonal PSH",f:"PSH_adj = PSH_base × seasonal_multiplier",d:"Winter 0.65, Spring 0.85, Summer 1.0, Fall 0.80."},
+      {n:"Cloud Attenuation",f:"Irr = I_clear × (1 - Beta(α,β))",d:"Clear α=2/β=8, Typical α=3/β=6, Poor α=3/β=3."},
+      {n:"Inverter Efficiency",f:"P_AC = P_DC × η_inv",d:"Defaults 95%. Range 85-98%."},
+      {n:"Sub-Derates",f:"P_eff = P_STC × T_d × Tilt_d × ∏(sub)",d:"Wiring 98%, Soiling 98%, Mismatch 98%, Availability 97%, Degradation 99.85%/yr = ~0.86 total."}
+    ]},
+    {id:"battery",title:"Battery Physics",items:[
+      {n:"Peukert's Law",f:"C_actual = C_rated × (I_rated/I_actual)^(k-1)",d:"LFP k=1.05 (near-ideal), Lead-acid k=1.25 (significant rate loss)."},
+      {n:"C-Rate Limits",f:"P_max = C_rate × Capacity_kWh × 1000",d:"LFP 0.5C, Lead-acid 0.2C."},
+      {n:"Temp Derate",f:"C = C_25°C × [1 - slope × max(0, 25-T)]",d:"LFP 0.8%/°C, Lead-acid 1.2%/°C."},
+      {n:"Calendar Aging",f:"Retention = 1 - (fade_rate × years)",d:"LFP 2%/yr, Lead-acid 5%/yr."},
+      {n:"Combined",f:"Ret = (1-cycle_fade) × (1-calendar_fade)",d:"Multiplicative model."}
+    ]},
+    {id:"degrad",title:"Degradation Model",items:[
+      {n:"Cycle Life",f:"Life = f(DoD) interpolated 50%-80%",d:"LFP 4500@80% / 6000@50%, Lead-acid 200@80% / 400@50%."},
+      {n:"Yearly Projection",f:"Cap_y = Cap_y-1 × (1-cycle) × (1-calendar)",d:"Combined cycle + calendar aging."}
+    ]}
+  ];
   return React.createElement("div",{className:"bg-white rounded-xl shadow border border-gray-100"},
     React.createElement("button",{onClick:()=>setOpen(!open),className:"w-full px-4 py-3 flex items-center justify-between text-left"},
       React.createElement("div",null,
-        React.createElement("h3",{className:"font-semibold text-gray-900"},"Assumptions & Simplifications"),
-        React.createElement("p",{className:"text-xs text-gray-600"},"Model derating factors and notes.")
+        React.createElement("h3",{className:"font-semibold text-gray-900"},"Assumptions & Methodology"),
+        React.createElement("p",{className:"text-xs text-gray-600"},"Formulas, constants, and sources.")
       ),
       React.createElement("span",{className:"text-gray-400"},open?"▲":"▼")
     ),
-    open&&React.createElement("div",{className:"px-4 pb-4 space-y-2 text-sm"},
-      React.createElement("div",{className:"p-2 bg-gray-50 rounded"},React.createElement("b",null,"System Derate: "),"0.86 (NREL PVWatts)"),
-      React.createElement("div",{className:"p-2 bg-gray-50 rounded"},React.createElement("b",null,"Temp Derate: "),(r.td*100).toFixed(1)+"% — 0.4%/°C above 25°C cell"),
-      React.createElement("div",{className:"p-2 bg-gray-50 rounded"},React.createElement("b",null,"Tilt/Orient: "),(r.od*100).toFixed(1)+"% — lookup table"),
-      React.createElement("div",{className:"p-2 bg-gray-50 rounded"},React.createElement("b",null,"Battery: "),r.ch.name+" · DoD "+(r.cfg.battery.dod*100).toFixed(0)+"% · RTE "+(r.cfg.battery.rte*100).toFixed(0)+"%"),
-      React.createElement("div",{className:"p-2 bg-gray-50 rounded"},React.createElement("b",null,"Solar Curve: "),"Sine-squared clear-sky idealized"),
-      React.createElement("div",{className:"p-3 bg-amber-50 rounded text-amber-800"},React.createElement("b",null,"Note: "),"Estimates for planning only. Consult a certified installer.")
+    open&&React.createElement("div",{className:"px-4 pb-4 space-y-3 text-sm"},
+      React.createElement("div",{className:"p-2 bg-blue-50 rounded text-xs"},
+        React.createElement("b",null,"Season: "),r.season," · ",
+        React.createElement("b",null,"Weather: "),r.cloud," · ",
+        React.createElement("b",null,"PSH: "),r.adjPSH?.toFixed(1)," · ",
+        React.createElement("b",null,"Battery: "),r.ch.name
+      ),
+      sections.map(s=>React.createElement("div",{key:s.id,className:"border rounded-lg overflow-hidden"},
+        React.createElement("button",{onClick:()=>toggle(s.id),className:"w-full px-3 py-2 flex items-center justify-between bg-gray-50 text-left"},
+          React.createElement("span",{className:"font-medium text-gray-900"},s.title),
+          React.createElement("span",{className:"text-gray-400 text-xs"},sec[s.id]?"▲":"▼")
+        ),
+        sec[s.id]&&React.createElement("div",{className:"px-3 py-2 space-y-2"},
+          s.items.map((it,i)=>React.createElement("div",{key:i,className:"bg-white border rounded p-2"},
+            React.createElement("div",{className:"font-medium text-gray-900 text-xs"},it.n),
+            React.createElement("div",{className:"font-mono text-xs bg-gray-50 rounded p-1 my-1"},it.f),
+            React.createElement("div",{className:"text-xs text-gray-500"},it.d)
+          ))
+        )
+      )),
+      r.dg&&React.createElement("div",{className:"p-2 bg-purple-50 rounded text-xs"},
+        React.createElement("b",{className:"text-purple-900"},"Battery Life: "),
+        "Year at 80%: ",r.dg.y80," · Year at 50%: ",r.dg.y50," · Cycle life: ",r.dg.life?.toLocaleString()
+      ),
+      React.createElement("div",{className:"p-3 bg-amber-50 rounded text-amber-800 text-xs"},
+        React.createElement("b",null,"Note: "),"Estimates for planning only. Consult a certified installer."
+      )
     )
   );
 }
@@ -620,7 +882,8 @@ function App(){
     home:{cz:"us_temp",ht:"sf",hrs:72,bpm:4},
     loads:{apps:DEFAULT_APPS.slice(0,8)},
     solar:{cnt:10,w:400,tilt:30,ori:"S"},
-    battery:{cap:10,chem:"lfp",dod:0.92,rte:0.95}
+    battery:{cap:10,chem:"lfp",dod:0.92,rte:0.95},
+    advanced:{season:"summer",cloud:"typical"}
   });
 
   useEffect(()=>{
@@ -628,7 +891,7 @@ function App(){
       setSim(true);
       setTimeout(()=>{
         const z=ZONES.find(x=>x.id===cfg.home.cz)||ZONES[0];
-        try{setRes(runSim({apps:cfg.loads.apps,solar:cfg.solar,battery:cfg.battery,zone:z,hrs:cfg.home.hrs,bpy:cfg.home.bpm}))}catch(e){console.error(e)}
+        try{setRes(runSim({apps:cfg.loads.apps,solar:cfg.solar,battery:cfg.battery,zone:z,hrs:cfg.home.hrs,bpy:cfg.home.bpm,adv:cfg.advanced}))}catch(e){console.error(e)}
         setSim(false);
       },400);
     }
@@ -636,44 +899,43 @@ function App(){
 
   const u=(s,v)=>setCfg(p=>({...p,[s]:v}));
   const idx=STEPS.findIndex(x=>x.id===step);
-  const nxt=()=>{if(idx<4)setStep(STEPS[idx+1].id)};
+  const nxt=()=>{if(idx<STEPS.length-1)setStep(STEPS[idx+1].id)};
   const prv=()=>{if(idx>0)setStep(STEPS[idx-1].id)};
 
   let content=null;
-  if(step==="home"){
-    content=React.createElement(HomeForm,{cfg:cfg.home,set:v=>u("home",v)});
-  }else if(step==="loads"){
-    content=React.createElement(LoadsForm,{cfg:cfg.loads,set:v=>u("loads",v)});
-  }else if(step==="solar"){
-    content=React.createElement(SolarForm,{cfg:cfg.solar,set:v=>u("solar",v)});
-  }else if(step==="battery"){
-    content=React.createElement(BatteryForm,{cfg:cfg.battery,set:v=>u("battery",v)});
-  }else if(step==="results"){
+  if(step==="home")content=React.createElement(HomeForm,{cfg:cfg.home,set:v=>u("home",v)});
+  else if(step==="loads")content=React.createElement(LoadsForm,{cfg:cfg.loads,set:v=>u("loads",v)});
+  else if(step==="solar")content=React.createElement(SolarForm,{cfg:cfg.solar,set:v=>u("solar",v)});
+  else if(step==="battery")content=React.createElement(BatteryForm,{cfg:cfg.battery,set:v=>u("battery",v)});
+  else if(step==="advanced")content=React.createElement(AdvancedForm,{cfg:cfg.advanced,set:v=>u("advanced",v),chem:cfg.battery.chem});
+  else if(step==="results"){
     if(sim){
       content=React.createElement("div",{className:"flex flex-col items-center py-16"},
-        React.createElement("svg",{className:"animate-spin h-10 w-10 mb-3",viewBox:"0 0 24 24",fill:"none"}, React.createElement("circle",{className:"opacity-25",cx:"12",cy:"12",r:"10",stroke:"currentColor",strokeWidth:"4"}), React.createElement("path",{className:"opacity-75",fill:"currentColor",d:"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"})),
+        React.createElement("svg",{className:"animate-spin h-10 w-10 mb-3 text-blue-600",viewBox:"0 0 24 24",fill:"none"},
+          React.createElement("circle",{className:"opacity-25",cx:"12",cy:"12",r:"10",stroke:"currentColor",strokeWidth:"4"}),
+          React.createElement("path",{className:"opacity-75",fill:"currentColor",d:"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"})
+        ),
         React.createElement("p",{className:"text-gray-600"},"Running simulation...")
       );
     }else if(res){
-      const dodFl=res.us*(1-(res.cfg.battery.dod||0.92));
       const hrs=Math.min(res.cfg.hrs,72);
       const socAll=Array.from({length:hrs},(_,h)=>res.al.soc[h%24]||0);
       const socCrit=Array.from({length:hrs},(_,h)=>res.cl.soc[h%24]||0);
       const prio=Object.entries(res.bP).filter(([_,v])=>v>0).map(([n,v])=>({name:n,value:v,color:n==="Critical"?"#dc2626":n==="Important"?"#f59e0b":"#6b7280"}));
       const cats=Object.entries(res.bC).filter(([_,v])=>v>0).map(([n,v])=>({name:n,value:v})).sort((a,b)=>b.value-a.value);
-      const totalP=prio.reduce((s,x)=>s+x.value,0);
       const loadH=Array(24).fill(res.dD/24);
-
       content=React.createElement("div",{className:"space-y-5","aria-live":"polite"},
         React.createElement(Scorecards,{r:res}),
         React.createElement("div",{className:"bg-white rounded-xl shadow border border-gray-100 p-4"},
           React.createElement("h3",{className:"font-semibold text-gray-900 mb-1"},"Battery State of Charge"),
-          React.createElement("p",{className:"text-xs text-gray-600 mb-3"},"SOC over "+hrs+"h. DoD floor: "+dodFl.toFixed(1)+" kWh."),
-          React.createElement(ChartDual,{d1:socAll,d2:socCrit,l1:"All Loads",l2:"Critical Only",c1:"#ef4444",c2:"#dc2626",dashed:true,w:600,h:220})
+          React.createElement("p",{className:"text-xs text-gray-600 mb-3"},"SOC over "+hrs+"h. Peukert-adjusted capacity shown."),
+          React.createElement(ChartDual,{d1:socAll,d2:socCrit,l1:"All Loads",l2:"Critical Only",c1:"#ef4444",c2:"#dc2626",dashed:true,w:600,h:220}),
+          res.al.physics&&React.createElement("div",{className:"mt-2 text-xs text-gray-500"},
+            "Temp derate: "+(res.al.physics.tempD*100).toFixed(1)+"% · Max charge: "+(res.al.physics.maxCh||0).toFixed(0)+"W · Max discharge: "+(res.al.physics.maxDis||0).toFixed(0)+"W"
+          )
         ),
         React.createElement("div",{className:"bg-white rounded-xl shadow border border-gray-100 p-4"},
           React.createElement("h3",{className:"font-semibold text-gray-900 mb-1"},"Hourly Energy Balance"),
-          React.createElement("p",{className:"text-xs text-gray-600 mb-3"},"Solar vs load consumption."),
           React.createElement(ChartArea,{solar:res.sc,load:loadH,w:600,h:220}),
           React.createElement("div",{className:"grid grid-cols-3 gap-4 mt-3 text-center text-sm"},
             React.createElement("div",null,React.createElement("span",{className:"text-gray-500"},"Solar"),React.createElement("div",{className:"font-medium text-yellow-600"},res.ds.toFixed(0)+" Wh")),
@@ -684,13 +946,12 @@ function App(){
         React.createElement("div",{className:"grid grid-cols-1 lg:grid-cols-2 gap-5"},
           React.createElement("div",{className:"bg-white rounded-xl shadow border border-gray-100 p-4"},
             React.createElement("h3",{className:"font-semibold text-gray-900 mb-1"},"Solar Output Curve"),
-            React.createElement("p",{className:"text-xs text-gray-600 mb-3"},"Clear-sky idealized profile."),
+            React.createElement("p",{className:"text-xs text-gray-600 mb-3"},"Season: "+res.season+" · Weather: "+res.cloud),
             React.createElement(ChartLine,{data:res.sc,color:"#fbbf24",w:500,h:180}),
             React.createElement("div",{className:"mt-2 text-xs text-gray-500"},"Peak: "+Math.max(...res.sc).toFixed(0)+"W · Total: "+res.ds.toFixed(0)+" Wh/day")
           ),
           React.createElement("div",{className:"bg-white rounded-xl shadow border border-gray-100 p-4"},
             React.createElement("h3",{className:"font-semibold text-gray-900 mb-1"},"Load Breakdown"),
-            React.createElement("p",{className:"text-xs text-gray-600 mb-3"},"By priority and category."),
             React.createElement("div",{className:"grid grid-cols-2 gap-4"},
               React.createElement("div",null,
                 React.createElement("div",{className:"text-[10px] text-gray-500 mb-1 text-center"},"Priority"),
@@ -708,6 +969,7 @@ function App(){
             )
           )
         ),
+        React.createElement(CostPanel,{r:res,cfg:cfg}),
         React.createElement(AssumptionsPanel,{r:res})
       );
     }
@@ -715,38 +977,36 @@ function App(){
 
   return React.createElement("div",{className:"min-h-screen bg-gray-50 flex flex-col"},
     React.createElement("header",{className:"bg-white shadow-sm border-b"},
-        React.createElement("div",{className:"max-w-6xl mx-auto px-4 py-4 flex items-center gap-3"},
-        React.createElement("div",{className:"p-2 bg-blue-600 rounded-lg text-white"}, React.createElement("svg",{className:"w-5 h-5",fill:"none",viewBox:"0 0 24 24",strokeWidth:"2",stroke:"currentColor"}, React.createElement("path",{strokeLinecap:"round",strokeLinejoin:"round",d:"M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"}))),
+      React.createElement("div",{className:"max-w-6xl mx-auto px-4 py-4 flex items-center gap-3"},
+        React.createElement("div",{className:"p-2 bg-blue-600 rounded-lg text-white"},React.createElement("svg",{className:"w-5 h-5",fill:"none",viewBox:"0 0 24 24",strokeWidth:"2",stroke:"currentColor"},React.createElement("path",{strokeLinecap:"round",strokeLinejoin:"round",d:"M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"}))),
         React.createElement("div",null,
           React.createElement("h1",{className:"text-lg font-bold text-gray-900"},"Home Energy Resilience Planner"),
-          React.createElement("p",{className:"text-xs text-gray-500"},"Phase 1: Engineering Engine")
+          React.createElement("p",{className:"text-xs text-gray-500"},"Phase 2: Real Physics Engine")
         )
       )
     ),
     React.createElement("nav",{className:"bg-white border-b"},
       React.createElement("div",{className:"max-w-6xl mx-auto px-4 py-1.5 flex overflow-x-auto gap-1"},
         STEPS.map((s,i)=>{
-          const cur=step===s.id;
-          const done=idx>i;
-          const ok=i<=idx+1;
+          const cur=step===s.id;const done=idx>i;const ok=i<=idx+1;
           const cls=cur?"bg-blue-50 text-blue-700 ring-1 ring-blue-200":done?"bg-green-50 text-green-700":ok?"hover:bg-gray-100 text-gray-600":"text-gray-300 cursor-not-allowed";
-          const numCls=cur?"bg-blue-600 text-white":done?"bg-green-600 text-white":"bg-gray-200 text-gray-500";
-           return React.createElement("button",{key:s.id,onClick:()=>ok&&setStep(s.id),disabled:!ok,className:"flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 "+cls,"aria-current": cur ? "step" : undefined},
-             React.createElement("span",{className:"w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold "+numCls}, done ? React.createElement("svg",{className:"w-4 h-4",fill:"none",viewBox:"0 0 24 24",strokeWidth:"3",stroke:"currentColor"}, React.createElement("path",{strokeLinecap:"round",strokeLinejoin:"round",d:"M5 13l4 4L19 7"})) : i+1),
-             React.createElement("span",{className:"hidden sm:inline"},s.l)
-           );
+          const nc=cur?"bg-blue-600 text-white":done?"bg-green-600 text-white":"bg-gray-200 text-gray-500";
+          return React.createElement("button",{key:s.id,onClick:()=>ok&&setStep(s.id),disabled:!ok,className:"flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 "+cls},
+            React.createElement("span",{className:"w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold "+nc},done?React.createElement("svg",{className:"w-4 h-4",fill:"none",viewBox:"0 0 24 24",strokeWidth:"3",stroke:"currentColor"},React.createElement("path",{strokeLinecap:"round",strokeLinejoin:"round",d:"M5 13l4 4L19 7"})):i+1),
+            React.createElement("span",{className:"hidden sm:inline"},s.l)
+          );
         })
       )
     ),
     React.createElement("main",{id:"main-content",className:"max-w-6xl mx-auto px-4 py-6 flex-1 w-full"},
       React.createElement("div",{className:"bg-white rounded-xl shadow-md border border-gray-100 p-5"},content),
       React.createElement("div",{className:"flex justify-between mt-4"},
-        React.createElement("button",{onClick:prv,disabled:step==="home",className:"px-4 py-2 rounded-lg font-medium text-sm "+(step==="home"?"bg-gray-100 text-gray-400 cursor-not-allowed":"bg-gray-100 text-gray-700 hover:bg-gray-200"),"aria-label":"Go back"},"← Back"),
-        step==="battery"?
-          React.createElement("button",{onClick:()=>setStep("results"),className:"px-5 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 text-sm","aria-label":"Run simulation"},"Run Simulation →"):
+        React.createElement("button",{onClick:prv,disabled:step==="home",className:"px-4 py-2 rounded-lg font-medium text-sm "+(step==="home"?"bg-gray-100 text-gray-400 cursor-not-allowed":"bg-gray-100 text-gray-700 hover:bg-gray-200")},"← Back"),
+        (step==="battery"||step==="advanced")?
+          React.createElement("button",{onClick:()=>setStep("results"),className:"px-5 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 text-sm"},"Run Simulation →"):
         step==="results"?
-          React.createElement("button",{onClick:()=>{setStep("home");setRes(null)},className:"px-5 py-2 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 text-sm","aria-label":"Start over"},"Start Over"):
-          React.createElement("button",{onClick:nxt,className:"px-5 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 text-sm","aria-label":"Next step"},"Next →")
+          React.createElement("button",{onClick:()=>{setStep("home");setRes(null)},className:"px-5 py-2 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 text-sm"},"Start Over"):
+          React.createElement("button",{onClick:nxt,className:"px-5 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 text-sm"},"Next →")
       )
     ),
     React.createElement("footer",{className:"bg-white border-t text-center py-3 text-xs text-gray-500"},"Estimates for planning. Consult a certified installer.")

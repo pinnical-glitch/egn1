@@ -21,17 +21,6 @@ export default function HomeForm({ config, onChange }) {
     }
   };
 
-  const validate = () => {
-    const newErrors = {};
-    if (!config.climateZone) {
-      newErrors.climateZone = 'Climate zone is required';
-    }
-    if (!config.houseType) {
-      newErrors.houseType = 'House type is required';
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
 
   return (
     <div className="space-y-6">
