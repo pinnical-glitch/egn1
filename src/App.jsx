@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { HomeForm, LoadsForm, SolarForm, BatteryForm } from './components/forms';
+import { HomeForm, LoadsForm, SolarForm, BatteryForm, AdvancedPhysicsForm } from './components/forms';
 import { ScorecardRow, SocChart, EnergyBalanceChart, SolarCurveChart, LoadBreakdownChart, AssumptionsPanel } from './components/dashboard';
 import { runSimulation } from './engine/index.js';
 import { getDefaultClimateZone, getClimateZone } from './engine/climateZones.js';
@@ -23,6 +23,7 @@ const STEPS = [
   { id: 'loads', label: 'Loads', description: 'Electrical appliances' },
   { id: 'solar', label: 'Solar', description: 'Panel configuration' },
   { id: 'battery', label: 'Battery', description: 'Storage system' },
+  { id: 'advanced', label: 'Physics', description: 'Advanced (optional)', optional: true },
   { id: 'results', label: 'Results', description: 'Simulation output' },
 ];
 
@@ -54,6 +55,15 @@ function App() {
       maxDoD: 0.92,
       roundTripEfficiency: 0.95,
     },
+    advanced: {
+      season: 'summer',
+      cloudScenario: 'typical',
+      useAdvancedMode: false,
+      noct: 45,
+      tempCoeff: -0.0038,
+      inverterEfficiency: 0.95,
+      systemDerate: 0.86,
+    },
   });
 
   useEffect(() => {
@@ -74,6 +84,7 @@ function App() {
         climateZone: getClimateZone(config.home.climateZone),
         blackoutHours: config.home.blackoutHours,
         blackoutsPerYear: config.home.blackoutsPerYear,
+        advancedPhysics: config.advanced,
       };
       const simResults = runSimulation(simulationConfig);
       setResults(simResults);
@@ -137,6 +148,8 @@ function App() {
         return <SolarForm config={config.solar} onChange={(c) => handleConfigChange('solar', c)} />;
       case 'battery':
         return <BatteryForm config={config.battery} onChange={(c) => handleConfigChange('battery', c)} />;
+      case 'advanced':
+        return <AdvancedPhysicsForm config={config.advanced} onChange={(c) => handleConfigChange('advanced', c)} />;
       case 'results':
         return (
           <div className="space-y-6" aria-live="polite">
@@ -185,7 +198,7 @@ function App() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Home Energy Resilience Planner</h1>
-              <p className="text-sm text-gray-600">Phase 1: Engineering Engine</p>
+              <p className="text-sm text-gray-600">Phase 2: Real Physics Engine</p>
             </div>
           </div>
         </div>
@@ -247,7 +260,7 @@ function App() {
             ← Back
           </button>
 
-          {currentStep === 'battery' ? (
+          {currentStep === 'advanced' || currentStep === 'battery' ? (
             <button
               onClick={handleRunSimulation}
               aria-label="Run simulation"

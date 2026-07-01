@@ -15,10 +15,18 @@ import {
 
 import {
   calculateTempDerate,
+  calculateCellTemperature,
   getTiltOrientationDerate,
   calculateEffectiveArrayPower,
+  calculateEffectiveArrayPowerLegacy,
   calculateDailySolarEnergy,
   generateHourlySolarCurve,
+  applySeasonalMultiplier,
+  applyCloudAttenuation,
+  getSeasonalDaylightHours,
+  SEASONAL_MULTIPLIERS,
+  CLOUD_SCENARIOS,
+  DEFAULT_SUB_DERATES,
 } from './solar.js';
 
 import {
@@ -35,10 +43,18 @@ export {
   calculateEnergyDemandByPriority,
   calculateLoadBreakdownByCategory,
   calculateTempDerate,
+  calculateCellTemperature,
   getTiltOrientationDerate,
   calculateEffectiveArrayPower,
+  calculateEffectiveArrayPowerLegacy,
   calculateDailySolarEnergy,
   generateHourlySolarCurve,
+  applySeasonalMultiplier,
+  applyCloudAttenuation,
+  getSeasonalDaylightHours,
+  SEASONAL_MULTIPLIERS,
+  CLOUD_SCENARIOS,
+  DEFAULT_SUB_DERATES,
   getBatteryChemistry,
   calculateUsableCapacity,
   simulateSOC,
@@ -49,13 +65,20 @@ export { DEFAULT_APPLIANCES, PRIORITIES, CATEGORIES, createAppliance } from './a
 export { CLIMATE_ZONES, getClimateZone, getDefaultClimateZone } from './climateZones.js';
 
 /**
- * Run complete resilience simulation
+ * Run complete resilience simulation (Phase 2 Enhanced)
  * 
  * Convenience function that orchestrates the full simulation pipeline:
  * 1. Calculate load metrics
- * 2. Calculate solar output
+ * 2. Calculate solar output with advanced derating
  * 3. Run SOC simulation for all-loads and critical-loads scenarios
  * 4. Calculate degradation estimate
+ * 
+ * Phase 2 enhancements:
+ * - Seasonal PSH adjustment
+ * - NOCT-based cell temperature model
+ * - Stochastic cloud cover
+ * - Named sub-derates
+ * - Inverter efficiency
  * 
  * @param {Object} config - Full simulation configuration
  * @returns {Object} Complete simulation results
@@ -68,7 +91,21 @@ export function runSimulation(config) {
     climateZone,
     blackoutHours = 72,
     blackoutsPerYear = 4,
+    // Phase 2 advanced physics options (all optional with sensible defaults)
+    advancedPhysics = {},
   } = config;
+  
+  // Extract advanced physics options with defaults
+  const {
+    season = 'summer',  // Default to summer (peak production)
+    cloudScenario = 'typical',
+    useAdvancedMode = false,
+    subDerates = null,
+    noct = 45,
+    tempCoeff = -0.0038,
+    inverterEfficiency = 0.95,
+    systemDerate = 0.86,  // Legacy mode default
+  } = advancedPhysics;
   
   // 1. Load calculations
   const totalConnectedLoad = calculateTotalConnectedLoad(selectedAppliances);
@@ -77,23 +114,66 @@ export function runSimulation(config) {
   const energyDemandByPriority = calculateEnergyDemandByPriority(selectedAppliances);
   const loadBreakdownByCategory = calculateLoadBreakdownByCategory(selectedAppliances);
   
-  // 2. Solar calculations
-  const tempDerate = calculateTempDerate(climateZone.avgAmbientTempC);
+  // 2. Solar calculations (Phase 2 enhanced)
+  const tempDerate = calculateTempDerate(
+    climateZone.avgAmbientTempC,
+    800,  // Standard test irradiance
+    noct,
+    tempCoeff
+  );
+  
   const tiltOrientationDerate = getTiltOrientationDerate(
     solarConfig.orientation,
     solarConfig.tiltDegrees
   );
-  const effectiveArrayPower = calculateEffectiveArrayPower(
-    solarConfig.panelCount,
-    solarConfig.panelWattageSTC,
-    tempDerate,
-    tiltOrientationDerate
+  
+  // Calculate effective array power (advanced or legacy mode)
+  let effectiveArrayPower;
+  if (useAdvancedMode && subDerates) {
+    effectiveArrayPower = calculateEffectiveArrayPower(
+      solarConfig.panelCount,
+      solarConfig.panelWattageSTC,
+      tempDerate,
+      tiltOrientationDerate,
+      subDerates
+    );
+  } else {
+    effectiveArrayPower = calculateEffectiveArrayPowerLegacy(
+      solarConfig.panelCount,
+      solarConfig.panelWattageSTC,
+      tempDerate,
+      tiltOrientationDerate,
+      systemDerate
+    );
+  }
+  
+  // Apply seasonal adjustment to PSH
+  const adjustedPSH = applySeasonalMultiplier(
+    climateZone.peakSunHours,
+    season
   );
+  
+  // Calculate daily solar energy
   const dailySolarEnergy = calculateDailySolarEnergy(
     effectiveArrayPower,
-    climateZone.peakSunHours
+    adjustedPSH
   );
-  const hourlySolarOutput = generateHourlySolarCurve(dailySolarEnergy);
+  
+  // Apply cloud attenuation
+  const cloudAdjustedEnergy = applyCloudAttenuation(dailySolarEnergy, cloudScenario);
+  
+  // Get seasonal daylight hours for solar curve
+  const daylightHours = getSeasonalDaylightHours(40, season); // Approximate US latitude
+  
+  // Generate hourly solar curve
+  const hourlySolarOutput = generateHourlySolarCurve(
+    cloudAdjustedEnergy,
+    daylightHours.sunrise,
+    daylightHours.sunset
+  );
+  
+  // Apply inverter efficiency (DC to AC conversion)
+  const hourlySolarAC = hourlySolarOutput.map(w => w * inverterEfficiency);
   
   // 3. Battery configuration
   const chemistry = getBatteryChemistry(batteryConfig.chemistry);
@@ -110,7 +190,7 @@ export function runSimulation(config) {
     usableCapacityKwh,
     maxDoD: batteryConfig.maxDoD,
     roundTripEfficiency: batteryConfig.roundTripEfficiency,
-    hourlySolarOutput,
+    hourlySolarOutput: hourlySolarAC,
     hourlyLoadDemand: hourlyLoadProfile,
     blackoutHours,
   });
@@ -124,7 +204,7 @@ export function runSimulation(config) {
     usableCapacityKwh,
     maxDoD: batteryConfig.maxDoD,
     roundTripEfficiency: batteryConfig.roundTripEfficiency,
-    hourlySolarOutput,
+    hourlySolarOutput: hourlySolarAC,
     hourlyLoadDemand: criticalHourlyLoad,
     blackoutHours,
   });
@@ -148,10 +228,13 @@ export function runSimulation(config) {
     
     // Solar metrics
     effectiveArrayPower,
-    dailySolarEnergy,
-    hourlySolarOutput,
+    dailySolarEnergy: cloudAdjustedEnergy,  // Return cloud-adjusted value
+    hourlySolarOutput: hourlySolarAC,
     tempDerate,
     tiltOrientationDerate,
+    adjustedPSH,
+    cloudScenario,
+    season,
     
     // Battery metrics
     usableCapacityKwh,
@@ -172,6 +255,15 @@ export function runSimulation(config) {
       climateZone,
       blackoutHours,
       blackoutsPerYear,
+      advancedPhysics: {
+        season,
+        cloudScenario,
+        useAdvancedMode,
+        noct,
+        tempCoeff,
+        inverterEfficiency,
+        systemDerate,
+      },
     },
   };
 }
