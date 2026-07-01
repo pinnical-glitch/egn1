@@ -35,7 +35,7 @@ function CustomTooltip({ active, payload, label }) {
 export default function SolarCurveChart({ results }) {
   if (!results) return null;
 
-  const { hourlySolarOutput, effectiveArrayPower } = results;
+  const { hourlySolarOutput } = results;
 
   // Prepare 24-hour data for a single representative day
   const chartData = Array.from({ length: 24 }, (_, hour) => ({

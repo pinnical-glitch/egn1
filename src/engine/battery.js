@@ -286,7 +286,6 @@ export function simulateSOC({
   
   // Initialize SOC
   let socKwh = initialSocKwh !== null ? initialSocKwh : effectiveCapacityKwh;
-  const minSocKwh = effectiveCapacityKwh * (1 - maxDoD);
   
   // Calculate C-rate limits in watts
   const maxChargeW = applyCRateLimits ? calculateCRateLimit(nameplateKwh, chargeRateLimit) : Infinity;

@@ -42,14 +42,6 @@ export default function SocChart({ results }) {
   const { allLoads, criticalLoads, usableCapacityKwh, config: simConfig } = results;
   const dodFloor = usableCapacityKwh * (1 - (simConfig.battery?.maxDoD || 0.92));
 
-  // Prepare chart data
-  const chartData = allLoads.hourlySoc.map((soc, index) => ({
-    hour: index,
-    allLoads: soc,
-    criticalLoads: criticalLoads?.hourlySoc[index] || soc,
-    dodFloor: dodFloor,
-  }));
-
   // Extend to show full blackout duration if > 24 hours
   const extendedData = [];
   const totalHours = simConfig.blackoutHours || 72;

@@ -4,6 +4,8 @@ import { BATTERY_CHEMISTRY } from '../../engine/battery.js';
 export default function BatteryForm({ config, onChange }) {
   const [errors, setErrors] = useState({});
   const prevChemistryRef = useRef(config.chemistry);
+  const prevDoDRef = useRef(config.maxDoD);
+  const prevEffRef = useRef(config.roundTripEfficiency);
 
   const handleChange = (field, value) => {
     const newConfig = { ...config, [field]: value };
@@ -15,10 +17,13 @@ export default function BatteryForm({ config, onChange }) {
   };
 
   // Update defaults when chemistry changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const prevChemistry = prevChemistryRef.current;
+    const prevDoD = prevDoDRef.current;
+    const prevEff = prevEffRef.current;
     prevChemistryRef.current = config.chemistry;
+    prevDoDRef.current = config.maxDoD;
+    prevEffRef.current = config.roundTripEfficiency;
     if (prevChemistry === config.chemistry) return;
     
     if (config.chemistry) {
@@ -26,11 +31,10 @@ export default function BatteryForm({ config, onChange }) {
       const prevChem = prevChemistry ? BATTERY_CHEMISTRY[prevChemistry.toUpperCase()] : null;
       if (chemistry) {
         const newConfig = { ...config };
-        // Reset if undefined OR if value matches previous chemistry's default
-        if (config.maxDoD === undefined || (prevChem && config.maxDoD === prevChem.defaultMaxDoD)) {
+        if (prevDoD === undefined || (prevChem && prevDoD === prevChem.defaultMaxDoD)) {
           newConfig.maxDoD = chemistry.defaultMaxDoD;
         }
-        if (config.roundTripEfficiency === undefined || (prevChem && config.roundTripEfficiency === prevChem.defaultRoundTripEfficiency)) {
+        if (prevEff === undefined || (prevChem && prevEff === prevChem.defaultRoundTripEfficiency)) {
           newConfig.roundTripEfficiency = chemistry.defaultRoundTripEfficiency;
         }
         if (newConfig.maxDoD !== config.maxDoD || newConfig.roundTripEfficiency !== config.roundTripEfficiency) {
@@ -38,7 +42,7 @@ export default function BatteryForm({ config, onChange }) {
         }
       }
     }
-  }, [config.chemistry, onChange]);
+  }, [config, onChange]);
 
   const chemistry = config.chemistry ? BATTERY_CHEMISTRY[config.chemistry.toUpperCase()] : BATTERY_CHEMISTRY.LFP;
   const usableCapacityKwh = (config.capacityKwh || 0) * (config.maxDoD || 0.92);

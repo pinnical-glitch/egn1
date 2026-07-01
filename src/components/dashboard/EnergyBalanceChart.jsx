@@ -46,14 +46,6 @@ export default function EnergyBalanceChart({ results }) {
   const { hourlySolarOutput, config: simConfig, dailyEnergyDemand } = results;
   const hourlyLoadDemand = new Array(24).fill(dailyEnergyDemand / 24);
 
-  // Prepare 24-hour data
-  const chartData = Array.from({ length: 24 }, (_, hour) => ({
-    hour,
-    solar: hourlySolarOutput[hour] || 0,
-    load: hourlyLoadDemand[hour] || 0,
-    net: (hourlySolarOutput[hour] || 0) - hourlyLoadDemand[hour],
-  }));
-
   // Extend to show first 72 hours if blackout > 24h
   const totalHours = Math.min(simConfig.blackoutHours || 72, 72);
   const extendedData = [];

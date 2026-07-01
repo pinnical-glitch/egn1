@@ -31,16 +31,6 @@ export default function LoadsForm({ config, onChange }) {
     onChange({ ...config, appliances: newSelection });
   };
 
-  const handleUpdateAppliance = (applianceId, field, value) => {
-    const newSelection = selectedAppliances.map(a => {
-      if (a.id === applianceId) {
-        return { ...a, [field]: value };
-      }
-      return a;
-    });
-    onChange({ ...config, appliances: newSelection });
-  };
-
   const handleAddCustomAppliance = () => {
     // Validate
     const newErrors = {};
