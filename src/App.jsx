@@ -149,7 +149,7 @@ function App() {
       case 'battery':
         return <BatteryForm config={config.battery} onChange={(c) => handleConfigChange('battery', c)} />;
       case 'advanced':
-        return <AdvancedPhysicsForm config={config.advanced} onChange={(c) => handleConfigChange('advanced', c)} />;
+        return <AdvancedPhysicsForm config={config.advanced} onChange={(c) => handleConfigChange('advanced', c)} batteryChemistry={config.battery.chemistry} />;
       case 'results':
         return (
           <div className="space-y-6" aria-live="polite">

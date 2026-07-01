@@ -34,6 +34,11 @@ import {
   calculateUsableCapacity,
   simulateSOC,
   calculateDegradation,
+  calculatePeukertAdjustedCapacity,
+  calculateCRateLimit,
+  calculateBatteryTempDerate,
+  calculateCalendarAging,
+  calculateCombinedDegradation,
 } from './battery.js';
 
 export {
@@ -59,6 +64,11 @@ export {
   calculateUsableCapacity,
   simulateSOC,
   calculateDegradation,
+  calculatePeukertAdjustedCapacity,
+  calculateCRateLimit,
+  calculateBatteryTempDerate,
+  calculateCalendarAging,
+  calculateCombinedDegradation,
 };
 
 export { DEFAULT_APPLIANCES, PRIORITIES, CATEGORIES, createAppliance } from './appliances.js';
@@ -95,16 +105,29 @@ export function runSimulation(config) {
     advancedPhysics = {},
   } = config;
   
+  // Get battery chemistry first (needed for default physics parameters)
+  const chemistry = getBatteryChemistry(batteryConfig.chemistry);
+  
   // Extract advanced physics options with defaults
   const {
-    season = 'summer',  // Default to summer (peak production)
+    season = 'summer',
     cloudScenario = 'typical',
     useAdvancedMode = false,
     subDerates = null,
     noct = 45,
     tempCoeff = -0.0038,
     inverterEfficiency = 0.95,
-    systemDerate = 0.86,  // Legacy mode default
+    systemDerate = 0.86,
+    // Phase 2 battery physics defaults (use chemistry-specific defaults)
+    nominalVoltageV = 48,
+    peukertExponent = chemistry.peukertExponent,
+    chargeRateLimit = chemistry.defaultChargeRate,
+    dischargeRateLimit = chemistry.defaultDischargeRate,
+    ambientTempC = climateZone.avgAmbientTempC,
+    batteryTempDerateSlope = chemistry.tempDerateSlope,
+    applyPeukert = true,
+    applyCRateLimits = true,
+    applyTempDerate = true,
   } = advancedPhysics;
   
   // 1. Load calculations
@@ -176,7 +199,6 @@ export function runSimulation(config) {
   const hourlySolarAC = hourlySolarOutput.map(w => w * inverterEfficiency);
   
   // 3. Battery configuration
-  const chemistry = getBatteryChemistry(batteryConfig.chemistry);
   const usableCapacityKwh = calculateUsableCapacity(
     batteryConfig.capacityKwh,
     batteryConfig.maxDoD
@@ -185,14 +207,25 @@ export function runSimulation(config) {
   // 4. Create hourly load profile (simplified)
   const hourlyLoadProfile = new Array(24).fill(dailyEnergyDemand / 24);
   
-  // 5. Run SOC simulation for all loads
+  // 5. Run SOC simulation for all loads (Phase 2 enhanced with physics)
   const allLoadsResult = simulateSOC({
     usableCapacityKwh,
+    nameplateCapacityKwh: batteryConfig.capacityKwh,
     maxDoD: batteryConfig.maxDoD,
     roundTripEfficiency: batteryConfig.roundTripEfficiency,
     hourlySolarOutput: hourlySolarAC,
     hourlyLoadDemand: hourlyLoadProfile,
     blackoutHours,
+    // Phase 2 physics parameters
+    nominalVoltageV,
+    peukertExponent,
+    chargeRateLimit,
+    dischargeRateLimit,
+    ambientTempC,
+    tempDerateSlope: batteryTempDerateSlope,
+    applyPeukert,
+    applyCRateLimits,
+    applyTempDerate,
   });
   
   // 6. Run SOC simulation for critical loads only
@@ -202,20 +235,32 @@ export function runSimulation(config) {
   
   const criticalLoadsResult = simulateSOC({
     usableCapacityKwh,
+    nameplateCapacityKwh: batteryConfig.capacityKwh,
     maxDoD: batteryConfig.maxDoD,
     roundTripEfficiency: batteryConfig.roundTripEfficiency,
     hourlySolarOutput: hourlySolarAC,
     hourlyLoadDemand: criticalHourlyLoad,
     blackoutHours,
+    // Phase 2 physics parameters
+    nominalVoltageV,
+    peukertExponent,
+    chargeRateLimit,
+    dischargeRateLimit,
+    ambientTempC,
+    tempDerateSlope: batteryTempDerateSlope,
+    applyPeukert,
+    applyCRateLimits,
+    applyTempDerate,
   });
   
-  // 7. Degradation estimate
+  // 7. Degradation estimate (Phase 2 enhanced with calendar aging)
   const degradation = calculateDegradation({
     totalEnergyDischargedWh: allLoadsResult.totalEnergyDischargedWh,
     usableCapacityKwh,
     chemistryId: batteryConfig.chemistry,
     maxDoD: batteryConfig.maxDoD,
     blackoutsPerYear,
+    yearsOfOwnership: 10, // Default 10-year ownership period
   });
   
   return {
@@ -239,6 +284,7 @@ export function runSimulation(config) {
     // Battery metrics
     usableCapacityKwh,
     chemistry,
+    batteryPhysics: allLoadsResult.physics,
     
     // Simulation results
     allLoads: allLoadsResult,
@@ -263,6 +309,14 @@ export function runSimulation(config) {
         tempCoeff,
         inverterEfficiency,
         systemDerate,
+        nominalVoltageV,
+        peukertExponent,
+        chargeRateLimit,
+        dischargeRateLimit,
+        ambientTempC,
+        applyPeukert,
+        applyCRateLimits,
+        applyTempDerate,
       },
     },
   };
