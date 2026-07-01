@@ -5,11 +5,48 @@
  * This module can be imported and used independently of any UI framework.
  */
 
-export * as loads from './loads.js';
-export * as solar from './solar.js';
-export * as battery from './battery.js';
-export * as appliances from './appliances.js';
-export * as climateZones from './climateZones.js';
+import {
+  calculateTotalConnectedLoad,
+  calculatePeakLoad,
+  calculateDailyEnergyDemand,
+  calculateEnergyDemandByPriority,
+  calculateLoadBreakdownByCategory,
+} from './loads.js';
+
+import {
+  calculateTempDerate,
+  getTiltOrientationDerate,
+  calculateEffectiveArrayPower,
+  calculateDailySolarEnergy,
+  generateHourlySolarCurve,
+} from './solar.js';
+
+import {
+  getBatteryChemistry,
+  calculateUsableCapacity,
+  simulateSOC,
+  calculateDegradation,
+} from './battery.js';
+
+export {
+  calculateTotalConnectedLoad,
+  calculatePeakLoad,
+  calculateDailyEnergyDemand,
+  calculateEnergyDemandByPriority,
+  calculateLoadBreakdownByCategory,
+  calculateTempDerate,
+  getTiltOrientationDerate,
+  calculateEffectiveArrayPower,
+  calculateDailySolarEnergy,
+  generateHourlySolarCurve,
+  getBatteryChemistry,
+  calculateUsableCapacity,
+  simulateSOC,
+  calculateDegradation,
+};
+
+export { DEFAULT_APPLIANCES, PRIORITIES, CATEGORIES, createAppliance } from './appliances.js';
+export { CLIMATE_ZONES, getClimateZone, getDefaultClimateZone } from './climateZones.js';
 
 /**
  * Run complete resilience simulation
@@ -34,33 +71,33 @@ export function runSimulation(config) {
   } = config;
   
   // 1. Load calculations
-  const totalConnectedLoad = loads.calculateTotalConnectedLoad(selectedAppliances);
-  const peakLoad = loads.calculatePeakLoad(selectedAppliances);
-  const dailyEnergyDemand = loads.calculateDailyEnergyDemand(selectedAppliances);
-  const energyDemandByPriority = loads.calculateEnergyDemandByPriority(selectedAppliances);
-  const loadBreakdownByCategory = loads.calculateLoadBreakdownByCategory(selectedAppliances);
+  const totalConnectedLoad = calculateTotalConnectedLoad(selectedAppliances);
+  const peakLoad = calculatePeakLoad(selectedAppliances);
+  const dailyEnergyDemand = calculateDailyEnergyDemand(selectedAppliances);
+  const energyDemandByPriority = calculateEnergyDemandByPriority(selectedAppliances);
+  const loadBreakdownByCategory = calculateLoadBreakdownByCategory(selectedAppliances);
   
   // 2. Solar calculations
-  const tempDerate = solar.calculateTempDerate(climateZone.avgAmbientTempC);
-  const tiltOrientationDerate = solar.getTiltOrientationDerate(
+  const tempDerate = calculateTempDerate(climateZone.avgAmbientTempC);
+  const tiltOrientationDerate = getTiltOrientationDerate(
     solarConfig.orientation,
     solarConfig.tiltDegrees
   );
-  const effectiveArrayPower = solar.calculateEffectiveArrayPower(
+  const effectiveArrayPower = calculateEffectiveArrayPower(
     solarConfig.panelCount,
     solarConfig.panelWattageSTC,
     tempDerate,
     tiltOrientationDerate
   );
-  const dailySolarEnergy = solar.calculateDailySolarEnergy(
+  const dailySolarEnergy = calculateDailySolarEnergy(
     effectiveArrayPower,
     climateZone.peakSunHours
   );
-  const hourlySolarOutput = solar.generateHourlySolarCurve(dailySolarEnergy);
+  const hourlySolarOutput = generateHourlySolarCurve(dailySolarEnergy);
   
   // 3. Battery configuration
-  const chemistry = battery.getBatteryChemistry(batteryConfig.chemistry);
-  const usableCapacityKwh = battery.calculateUsableCapacity(
+  const chemistry = getBatteryChemistry(batteryConfig.chemistry);
+  const usableCapacityKwh = calculateUsableCapacity(
     batteryConfig.capacityKwh,
     batteryConfig.maxDoD
   );
@@ -69,7 +106,7 @@ export function runSimulation(config) {
   const hourlyLoadProfile = new Array(24).fill(dailyEnergyDemand / 24);
   
   // 5. Run SOC simulation for all loads
-  const allLoadsResult = battery.simulateSOC({
+  const allLoadsResult = simulateSOC({
     usableCapacityKwh,
     maxDoD: batteryConfig.maxDoD,
     roundTripEfficiency: batteryConfig.roundTripEfficiency,
@@ -80,10 +117,10 @@ export function runSimulation(config) {
   
   // 6. Run SOC simulation for critical loads only
   const criticalAppliances = selectedAppliances.filter(a => a.priority === 'Critical');
-  const criticalDailyDemand = loads.calculateDailyEnergyDemand(criticalAppliances);
+  const criticalDailyDemand = calculateDailyEnergyDemand(criticalAppliances);
   const criticalHourlyLoad = new Array(24).fill(criticalDailyDemand / 24);
   
-  const criticalLoadsResult = battery.simulateSOC({
+  const criticalLoadsResult = simulateSOC({
     usableCapacityKwh,
     maxDoD: batteryConfig.maxDoD,
     roundTripEfficiency: batteryConfig.roundTripEfficiency,
@@ -93,7 +130,7 @@ export function runSimulation(config) {
   });
   
   // 7. Degradation estimate
-  const degradation = battery.calculateDegradation({
+  const degradation = calculateDegradation({
     totalEnergyDischargedWh: allLoadsResult.totalEnergyDischargedWh,
     usableCapacityKwh,
     chemistryId: batteryConfig.chemistry,
