@@ -249,6 +249,231 @@ const estSurvival=(panels,pw,batKwh,cfg)=>{
   return Math.min(batH+solH*0.3,200);
 };
 
+const generateRecommendations=(res)=>{
+  const recs=[];
+  if(!res||!res.cfg||!res.cfg.apps||!res.cfg.apps.length)return recs;
+  const rCfg=res.cfg;
+  const hrs=rCfg.hrs||72;
+  const apps=rCfg.apps;
+  const dD=res.dD;
+  const ds=res.ds;
+  if(dD<=0||hrs<=0)return recs;
+  const loadH=Array(24).fill(dD/24);
+  const costCfg={solarPerW:2.75,batPerKwh:900,bosPct:17.5};
+  const deficitByH=loadH.map((l,h)=>Math.max(0,l-(res.sc[h]||0)));
+  const deficitHours=[];
+  for(let h=0;h<24;h++){if(deficitByH[h]>0)deficitHours.push(h);}
+  const totalDeficitWh=deficitByH.reduce((a,v)=>a+v,0);
+  const overnightHours=[];
+  for(let h=0;h<24;h++){if((res.sc[h]||0)<5)overnightHours.push(h);}
+
+  if(res.al.dep<hrs){
+    const depH=res.al.dep;
+    const deficitHrs=hrs-depH;
+    const avgDeficitW=totalDeficitWh/24;
+    const neededKwh=Math.max(0.5,Math.ceil((deficitHrs*avgDeficitW/1000)*2)/2);
+    let projectedAllDep=depH;
+    try{
+      const ch=CHEM[rCfg.battery.chem]||CHEM.lfp;
+      const biggerCap=rCfg.battery.cap+neededKwh;
+      const biggerUs=biggerCap*rCfg.battery.dod;
+      const socCfg={cap:biggerUs,nameplate:biggerCap,dod:rCfg.battery.dod,rte:rCfg.battery.rte,
+        solar:res.sc,load:loadH,hrs:hrs,
+        peukertK:ch.peukert,crCh:ch.cr,crDis:ch.cr,
+        ambTemp:rCfg.zone?rCfg.zone.tmp:25,tempSlope:ch.tempSlope,
+        usePeukert:true,useCRate:true,useTemp:true};
+      projectedAllDep=simSOC(socCfg).dep;
+    }catch(e){}
+    const batCost=calcCost(0,0,neededKwh,costCfg);
+    const appContrib=apps.map(a=>({
+      ...a,overnightWh:a.w*(a.h/24)*overnightHours.length
+    })).sort((a,b)=>b.overnightWh-a.overnightWh);
+    const topApp=appContrib[0];
+    recs.push({
+      id:"increase-battery",
+      severity:"critical",
+      category:"battery",
+      title:"Battery depletes before blackout ends",
+      diagnosis:"Your battery reaches minimum SOC after "+depH.toFixed(1)+" hours — "+deficitHrs.toFixed(1)+" hours short of your "+hrs+"-hour blackout. Overnight deficit averages ~"+Math.round(avgDeficitW)+"W when solar drops to zero."+(topApp?", with "+topApp.name+" being the largest overnight draw at "+topApp.overnightWh.toFixed(0)+" Wh.":""),
+      actions:[
+        {
+          label:"Add "+neededKwh.toFixed(1)+" kWh of battery capacity",
+          projectedImpact:"Extends all-load survival to ~"+projectedAllDep.toFixed(0)+"h (from "+depH.toFixed(0)+"h)",
+          effort:"high",
+          costEstimate:batCost.total,
+          _before:depH,
+          _after:projectedAllDep
+        },
+        {
+          label:"Shed non-critical loads overnight",
+          projectedImpact:"Critical-only loads survive "+res.cl.dep.toFixed(0)+"h"+(res.cl.dep>=hrs?" — enough for full blackout":" — still "+(hrs-res.cl.dep).toFixed(0)+"h short"),
+          effort:"low",
+          costEstimate:0,
+          _before:depH,
+          _after:res.cl.dep
+        }
+      ],
+      affectedMetric:"Depletion (All)"
+    });
+  }
+
+  if(ds<dD){
+    const gapWh=dD-ds;
+    const panelW=rCfg.solar?rCfg.solar.w:400;
+    const adjPSH=res.adjPSH||4.5;
+    const additionalPanels=Math.ceil(gapWh/(panelW*adjPSH*0.86));
+    if(additionalPanels>0&&additionalPanels<50){
+      let projectedDep=res.al.dep;
+      try{
+        const ch=CHEM[rCfg.battery.chem]||CHEM.lfp;
+        let newSc;
+        if(ds>0){
+          const scale=(ds+additionalPanels*panelW*adjPSH*0.86)/ds;
+          newSc=res.sc.map(w=>w*scale);
+        }else{
+          const newDs=additionalPanels*panelW*adjPSH*0.86;
+          const dl=seasonDaylight(res.season||"summer");
+          newSc=solarCurve(newDs,dl.sunrise,dl.sunset).map(w=>w*0.95);
+        }
+        const socCfg={cap:res.us,nameplate:rCfg.battery.cap,dod:rCfg.battery.dod,rte:rCfg.battery.rte,
+          solar:newSc,load:loadH,hrs:hrs,
+          peukertK:ch.peukert,crCh:ch.cr,crDis:ch.cr,
+          ambTemp:rCfg.zone?rCfg.zone.tmp:25,tempSlope:ch.tempSlope,
+          usePeukert:true,useCRate:true,useTemp:true};
+        projectedDep=simSOC(socCfg).dep;
+      }catch(e){}
+      const solCost=calcCost(additionalPanels,panelW,0,costCfg);
+      recs.push({
+        id:"increase-solar",
+        severity:ds<dD*0.5?"critical":"warning",
+        category:"solar",
+        title:"Daily solar production is below demand",
+        diagnosis:"Your panels produce "+ds.toFixed(0)+" Wh/day against "+dD.toFixed(0)+" Wh/day demand — a "+gapWh.toFixed(0)+" Wh daily shortfall that drains the battery each cycle.",
+        actions:[{
+          label:"Add "+additionalPanels+" panel"+(additionalPanels>1?"s":"")+" ("+((additionalPanels*panelW/1000).toFixed(1))+" kW)",
+          projectedImpact:"Closes the "+gapWh.toFixed(0)+" Wh/day gap, extends survival to ~"+projectedDep.toFixed(0)+"h",
+          effort:"high",
+          costEstimate:solCost.total,
+          _before:res.al.dep,
+          _after:projectedDep
+        }],
+        affectedMetric:"Daily Solar"
+      });
+    }
+  }
+
+  if(res.od<0.92){
+    const bestD=tiltD("S",30);
+    const lostPct=((1-res.od/bestD)*100).toFixed(0);
+    recs.push({
+      id:"optimize-orientation",
+      severity:"info",
+      category:"solar",
+      title:"Panel orientation is suboptimal",
+      diagnosis:"Your "+(rCfg.solar?rCfg.solar.ori:"?")+"/"+(rCfg.solar?rCfg.solar.tilt:"?")+"° setup achieves "+(res.od*100).toFixed(0)+"% orientation derate. South-facing at 30° would achieve "+(bestD*100).toFixed(0)+"%.",
+      actions:[{
+        label:"Adjust tilt to ~30° and face panels south",
+        projectedImpact:"Could recover ~"+lostPct+"% of orientation loss",
+        effort:"medium",
+        costEstimate:null
+      }],
+      affectedMetric:"Solar Output Curve"
+    });
+  }
+
+  if(res.al.dep<hrs){
+    const schedulable=apps.filter(a=>a.p!=="Critical"&&!a.m&&a.w*a.h>50)
+      .sort((a,b)=>(b.w*b.h)-(a.w*a.h));
+    if(schedulable.length>0){
+      const top=schedulable[0];
+      const dayl=seasonDaylight(res.season||"summer");
+      const shiftWh=top.w*top.h;
+      let projectedDep=res.al.dep;
+      try{
+        const ch=CHEM[rCfg.battery.chem]||CHEM.lfp;
+        const shiftLoad=Array(24).fill(0);
+        const baseHourly=dD/24;
+        const appHourly=top.w*(top.h/24);
+        for(let h=0;h<24;h++){
+          if(h>=dayl.sunrise&&h<=dayl.sunset)shiftLoad[h]=baseHourly;
+          else shiftLoad[h]=Math.max(0,baseHourly-appHourly);
+        }
+        const socCfg={cap:res.us,nameplate:rCfg.battery.cap,dod:rCfg.battery.dod,rte:rCfg.battery.rte,
+          solar:res.sc,load:shiftLoad,hrs:hrs,
+          peukertK:ch.peukert,crCh:ch.cr,crDis:ch.cr,
+          ambTemp:rCfg.zone?rCfg.zone.tmp:25,tempSlope:ch.tempSlope,
+          usePeukert:true,useCRate:true,useTemp:true};
+        projectedDep=simSOC(socCfg).dep;
+      }catch(e){}
+      const improvement=Math.max(0,projectedDep-res.al.dep);
+      recs.push({
+        id:"load-shift-"+top.id,
+        severity:improvement>2?"warning":"info",
+        category:"scheduling",
+        title:"Shift "+top.name+" to daylight hours",
+        diagnosis:top.name+" uses "+shiftWh.toFixed(0)+" Wh/day across "+top.h+"h. Moving its runtime to "+fmtH(dayl.sunrise)+"–"+fmtH(dayl.sunset)+" reduces overnight battery draw by ~"+(shiftWh*0.5).toFixed(0)+" Wh.",
+        actions:[{
+          label:"Run "+top.name+" between "+fmtH(dayl.sunrise)+" and "+fmtH(dayl.sunset),
+          projectedImpact:improvement>0.5?"Extends survival by ~"+improvement.toFixed(0)+"h (to ~"+projectedDep.toFixed(0)+"h)":"Modest improvement (~"+improvement.toFixed(1)+"h)",
+          effort:"low",
+          costEstimate:0,
+          _before:res.al.dep,
+          _after:projectedDep
+        }],
+        affectedMetric:"Depletion (All)"
+      });
+    }
+  }
+
+  if(dD>0&&res.al.dep<hrs){
+    const highLoad=apps.filter(a=>(a.w*a.h)/dD>0.25)
+      .sort((a,b)=>(b.w*b.h)-(a.w*a.h));
+    highLoad.forEach(a=>{
+      const pct=((a.w*a.h/dD)*100).toFixed(0);
+      recs.push({
+        id:"reduce-"+a.id,
+        severity:"warning",
+        category:"appliance",
+        title:a.name+" uses "+pct+"% of daily energy",
+        diagnosis:a.name+" consumes "+(a.w*a.h).toFixed(0)+" Wh/day out of "+dD.toFixed(0)+" Wh total. This single appliance accounts for over a quarter of your energy budget.",
+        actions:[{
+          label:"Replace with efficient model or reduce to "+Math.ceil(a.h*0.7)+"h/day",
+          projectedImpact:"Could save ~"+(a.w*a.h*0.3).toFixed(0)+" Wh/day",
+          effort:"medium",
+          costEstimate:null
+        }],
+        affectedMetric:"Load Breakdown"
+      });
+    });
+  }
+
+  if(res.cl.dep>=hrs&&res.al.dep<hrs){
+    const hasBatteryRec=recs.some(r=>r.id==="increase-battery");
+    if(!hasBatteryRec){
+      recs.push({
+        id:"critical-load-fallback",
+        severity:"info",
+        category:"scheduling",
+        title:"Critical loads alone survive the blackout",
+        diagnosis:"Running only critical loads extends survival to "+res.cl.dep.toFixed(0)+"h — enough for your "+hrs+"h blackout. This requires no hardware investment, just a load-shedding plan.",
+        actions:[{
+          label:"Create a load-shedding plan for non-critical appliances",
+          projectedImpact:"Survives full "+hrs+"h blackout at zero cost",
+          effort:"low",
+          costEstimate:0,
+          _before:res.al.dep,
+          _after:res.cl.dep
+        }],
+        affectedMetric:"Depletion (Crit)"
+      });
+    }
+  }
+
+  const sevOrder={critical:0,warning:1,info:2};
+  recs.sort((a,b)=>(sevOrder[a.severity]||2)-(sevOrder[b.severity]||2));
+  return recs.slice(0,6);
+};
+
 const runSim=cfg=>{
   const{apps,solar:s,battery:b,zone:z,hrs,bpy,adv}=cfg;
   const tL=totalL(apps),pL=peakL(apps),dD=dailyD(apps),bP=byP(apps),bC=byC(apps);
@@ -738,6 +963,28 @@ function ChartBar({data,w,h}){
   );
 }
 
+function DeficitChart({r}){
+  if(!r||!r.cfg||!r.cfg.apps)return null;
+  const apps=r.cfg.apps;
+  const dD=r.dD;
+  if(dD<=0||!apps.length)return null;
+  const loadH=Array(24).fill(dD/24);
+  const deficitHours=[];
+  for(let h=0;h<24;h++){if((r.sc[h]||0)<loadH[h])deficitHours.push(h);}
+  if(deficitHours.length===0)return null;
+  const data=apps.map(a=>{
+    const hourlyWh=a.w*(a.h/24);
+    const deficitWh=hourlyWh*deficitHours.length;
+    return{name:a.name||a.n,value:Math.round(deficitWh)};
+  }).filter(d=>d.value>0).sort((a,b)=>b.value-a.value).slice(0,8);
+  if(!data.length)return null;
+  return React.createElement("div",{className:"mt-3 pt-3 border-t"},
+    React.createElement("h4",{className:"text-xs font-semibold text-gray-700 mb-1"},"Deficit Contribution by Appliance"),
+    React.createElement("p",{className:"text-[10px] text-gray-500 mb-2"},"Wh consumed during "+deficitHours.length+" deficit hours (solar < load)"),
+    React.createElement(ChartBar,{data:data,w:500,h:Math.max(80,data.length*28)})
+  );
+}
+
 // Phase 2: Cost vs Resilience scatter chart
 function CostScatter({data,w,h}){
   if(!data||!data.length)return null;
@@ -874,6 +1121,63 @@ function AssumptionsPanel({r}){
   );
 }
 
+function RecommendationsPanel({r}){
+  const[showAll,setShowAll]=useState(false);
+  if(!r||!r.recs||!r.recs.length)return React.createElement("div",{className:"bg-white rounded-xl shadow border border-gray-100 p-4"},
+    React.createElement("h3",{className:"font-semibold text-gray-900 mb-1"},"Recommendations"),
+    React.createElement("div",{className:"p-4 text-center"},
+      React.createElement("div",{className:"text-green-600 text-lg mb-1"},"✓"),
+      React.createElement("p",{className:"text-sm text-gray-600"},"Your system covers the full "+(r.cfg?r.cfg.hrs:72)+"h blackout with margin."),
+      React.createElement("p",{className:"text-xs text-gray-500 mt-1"},"No critical optimization issues found.")
+    )
+  );
+  const recs=r.recs;
+  const top3=recs.slice(0,3);
+  const rest=recs.slice(3);
+  const hasMore=rest.length>0;
+  const sevColor={critical:"border-l-red-500 bg-red-50",warning:"border-l-amber-500 bg-amber-50",info:"border-l-blue-500 bg-blue-50"};
+  const sevBadge={critical:"bg-red-100 text-red-700",warning:"bg-amber-100 text-amber-700",info:"bg-blue-100 text-blue-700"};
+  const renderRec=(rec,idx)=>React.createElement("div",{key:rec.id||idx,className:"border-l-4 rounded-r-lg p-3 "+(sevColor[rec.severity]||sevColor.info)},
+    React.createElement("div",{className:"flex items-start gap-2 mb-1"},
+      React.createElement("span",{className:"text-[10px] px-1.5 py-0.5 rounded font-medium "+(sevBadge[rec.severity]||sevBadge.info)},rec.severity.toUpperCase()),
+      React.createElement("h4",{className:"font-medium text-gray-900 text-sm"},rec.title)
+    ),
+    React.createElement("p",{className:"text-xs text-gray-600 mt-1 mb-2"},rec.diagnosis),
+    React.createElement("div",{className:"space-y-1.5"},
+      rec.actions.map((a,ai)=>React.createElement("div",{key:ai,className:"flex items-start gap-2 text-xs"},
+        React.createElement("span",{className:"text-gray-400 mt-0.5"},"•"),
+        React.createElement("div",{className:"flex-1"},
+          React.createElement("span",{className:"text-gray-800"},a.label),
+          a.costEstimate!=null&&a.costEstimate>0&&React.createElement("span",{className:"text-gray-500 ml-1"},"(est. $"+a.costEstimate.toLocaleString()+")"),
+          React.createElement("div",{className:"flex items-center gap-2 mt-0.5"},
+            React.createElement("span",{className:"text-gray-500"},a.projectedImpact),
+            a._before!=null&&a._after!=null&&a._after>a._before&&React.createElement("span",{className:"text-green-600 font-medium"},"+"+((a._after-a._before)).toFixed(0)+"h")
+          )
+        )
+      ))
+    )
+  );
+  return React.createElement("div",{className:"bg-white rounded-xl shadow border border-gray-100 p-4 space-y-3"},
+    React.createElement("div",{className:"flex items-center justify-between"},
+      React.createElement("div",null,
+        React.createElement("h3",{className:"font-semibold text-gray-900"},"Recommendations"),
+        React.createElement("p",{className:"text-xs text-gray-500"},recs.length+" issue"+(recs.length!==1?"s":"")+" found")
+      ),
+      React.createElement("div",{className:"flex gap-1"},
+        recs.filter(x=>x.severity==="critical").length>0&&React.createElement("span",{className:"text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700"},recs.filter(x=>x.severity==="critical").length+" critical"),
+        recs.filter(x=>x.severity==="warning").length>0&&React.createElement("span",{className:"text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"},recs.filter(x=>x.severity==="warning").length+" warn")
+      )
+    ),
+    React.createElement("div",{className:"space-y-2"},top3.map(renderRec)),
+    hasMore&&!showAll&&React.createElement("button",{onClick:()=>setShowAll(true),className:"w-full text-center text-sm text-blue-600 hover:underline py-1"},
+      "Show all "+recs.length+" recommendations ▼"
+    ),
+    showAll&&hasMore&&React.createElement("div",{className:"space-y-2 border-t pt-2"},rest.map((rec,i)=>renderRec(rec,i+3))),
+    showAll&&hasMore&&React.createElement("button",{onClick:()=>setShowAll(false),className:"w-full text-center text-sm text-blue-600 hover:underline py-1"},"Show fewer ▲"),
+    React.createElement(DeficitChart,{r:r})
+  );
+}
+
 function App(){
   const[step,setStep]=useState("home");
   const[sim,setSim]=useState(false);
@@ -891,7 +1195,11 @@ function App(){
       setSim(true);
       setTimeout(()=>{
         const z=ZONES.find(x=>x.id===cfg.home.cz)||ZONES[0];
-        try{setRes(runSim({apps:cfg.loads.apps,solar:cfg.solar,battery:cfg.battery,zone:z,hrs:cfg.home.hrs,bpy:cfg.home.bpm,adv:cfg.advanced}))}catch(e){console.error(e)}
+        try{
+          const r=runSim({apps:cfg.loads.apps,solar:cfg.solar,battery:cfg.battery,zone:z,hrs:cfg.home.hrs,bpy:cfg.home.bpm,adv:cfg.advanced});
+          r.recs=generateRecommendations(r);
+          setRes(r);
+        }catch(e){console.error(e)}
         setSim(false);
       },400);
     }
@@ -926,6 +1234,7 @@ function App(){
       const loadH=Array(24).fill(res.dD/24);
       content=React.createElement("div",{className:"space-y-5","aria-live":"polite"},
         React.createElement(Scorecards,{r:res}),
+        React.createElement(RecommendationsPanel,{r:res}),
         React.createElement("div",{className:"bg-white rounded-xl shadow border border-gray-100 p-4"},
           React.createElement("h3",{className:"font-semibold text-gray-900 mb-1"},"Battery State of Charge"),
           React.createElement("p",{className:"text-xs text-gray-600 mb-3"},"SOC over "+hrs+"h. Peukert-adjusted capacity shown."),
@@ -981,7 +1290,7 @@ function App(){
         React.createElement("div",{className:"p-2 bg-blue-600 rounded-lg text-white"},React.createElement("svg",{className:"w-5 h-5",fill:"none",viewBox:"0 0 24 24",strokeWidth:"2",stroke:"currentColor"},React.createElement("path",{strokeLinecap:"round",strokeLinejoin:"round",d:"M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"}))),
         React.createElement("div",null,
           React.createElement("h1",{className:"text-lg font-bold text-gray-900"},"Home Energy Resilience Planner"),
-          React.createElement("p",{className:"text-xs text-gray-500"},"Phase 2: Real Physics Engine")
+          React.createElement("p",{className:"text-xs text-gray-500"},"Phase 3: Intelligent Recommendations")
         )
       )
     ),
