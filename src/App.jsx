@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { HomeForm, LoadsForm, SolarForm, BatteryForm, AdvancedPhysicsForm } from './components/forms';
-import { ScorecardRow, SocChart, EnergyBalanceChart, SolarCurveChart, LoadBreakdownChart, AssumptionsPanel } from './components/dashboard';
+import { ScorecardRow, SocChart, EnergyBalanceChart, SolarCurveChart, LoadBreakdownChart, AssumptionsPanel, CostVsResilience } from './components/dashboard';
 import { runSimulation } from './engine/index.js';
 import { getDefaultClimateZone, getClimateZone } from './engine/climateZones.js';
 import { DEFAULT_APPLIANCES } from './engine/appliances.js';
@@ -169,6 +169,7 @@ function App() {
                   <SolarCurveChart results={results} />
                   <LoadBreakdownChart results={results} />
                 </div>
+                <CostVsResilience results={results} config={config} />
                 <AssumptionsPanel results={results} />
               </>
             ) : null}
