@@ -113,7 +113,8 @@ describe('Battery Calculations', () => {
         maxDoD: 0.9,
         blackoutsPerYear: 4,
       });
-      expect(result.estimatedYearsRemaining).toBeGreaterThan(0);
+      // Phase 2: Now returns yearsFromCycling instead of estimatedYearsRemaining
+      expect(result.yearsFromCycling).toBeGreaterThan(0);
     });
 
     it('should include disclaimer', () => {

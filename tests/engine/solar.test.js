@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getTiltOrientationDerate,
   calculateTempDerate,
-  calculateEffectiveArrayPower,
+  calculateEffectiveArrayPowerLegacy,
   calculateDailySolarEnergy,
   generateHourlySolarCurve,
   validateSolarConfig,
@@ -33,8 +33,12 @@ describe('Solar Calculations', () => {
 
   describe('calculateTempDerate', () => {
     it('should return 1.0 at 25°C cell temp (5°C ambient)', () => {
+      // Phase 2: Use NOCT model - at 5°C ambient with NOCT=45, cell temp = 5 + (45-20)/800*800 = 30°C
+      // This gives a small derate, which is realistic
       const result = calculateTempDerate(5);
-      expect(result).toBeCloseTo(1.0, 2);
+      // With NOCT model: cellTemp = 5 + (45-20)/800*800 = 30°C
+      // derate = 1 + (-0.0038) * (30-25) = 1 - 0.019 = 0.981
+      expect(result).toBeCloseTo(0.981, 2);
     });
 
     it('should decrease at higher temperatures', () => {
@@ -42,15 +46,17 @@ describe('Solar Calculations', () => {
       expect(result).toBeLessThan(0.95);
     });
 
-    it('should not increase below 25°C cell temp', () => {
+    it('should not increase above 1.0 at very cold temperatures', () => {
       const result = calculateTempDerate(-10);
+      // At -10°C ambient, cell temp = -10 + 25 = 15°C (below 25°C reference)
+      // derate = 1.0 (no derate below reference)
       expect(result).toBe(1.0);
     });
   });
 
-  describe('calculateEffectiveArrayPower', () => {
+  describe('calculateEffectiveArrayPowerLegacy', () => {
     it('should apply all derate factors', () => {
-      const result = calculateEffectiveArrayPower(
+      const result = calculateEffectiveArrayPowerLegacy(
         10,    // 10 panels
         400,   // 400W each
         0.95,  // temp derate

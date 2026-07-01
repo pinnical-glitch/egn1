@@ -1,6 +1,4 @@
 import { useState, useMemo } from 'react';
-import { runSimulation } from '../../engine/index.js';
-import { getClimateZone } from '../../engine/climateZones.js';
 
 /**
  * Cost-vs-Resilience Dashboard Component
@@ -102,9 +100,9 @@ function ScatterChart({ data, width = 600, height = 350 }) {
   const maxCost = Math.max(...data.map(d => d.cost)) * 1.1;
   const maxHours = Math.max(...data.map(d => d.survivalHours)) * 1.1;
   
-  // Midpoints for quadrants
-  const midCost = maxCost / 2;
-  const midHours = maxHours / 2;
+  // Midpoints for quadrants (used for reference)
+  // const midCost = maxCost / 2;
+  // const midHours = maxHours / 2;
   
   // Scale functions
   const scaleX = (cost) => padding.left + (cost / maxCost) * chartWidth;
@@ -149,7 +147,7 @@ function ScatterChart({ data, width = 600, height = 350 }) {
       ))}
       
       {/* Data points */}
-      {data.map((point, i) => {
+      {data.map((point) => {
         const x = scaleX(point.cost);
         const y = scaleY(point.survivalHours);
         const isCustom = point.id === 'custom';

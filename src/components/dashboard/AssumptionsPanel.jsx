@@ -188,9 +188,6 @@ export default function AssumptionsPanel({ results }) {
   if (!results) return null;
 
   const { 
-    config: simConfig, 
-    tempDerate, 
-    tiltOrientationDerate, 
     chemistry,
     adjustedPSH,
     cloudScenario,
