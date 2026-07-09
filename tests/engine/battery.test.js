@@ -11,14 +11,14 @@ describe('Battery Calculations', () => {
   describe('getBatteryChemistry', () => {
     it('should return LFP defaults', () => {
       const result = getBatteryChemistry('lfp');
-      expect(result.defaultMaxDoD).toBe(0.92);
-      expect(result.defaultRoundTripEfficiency).toBe(0.95);
+      expect(result.dod).toBe(0.92);
+      expect(result.rte).toBe(0.95);
     });
 
     it('should return Lead-Acid defaults', () => {
       const result = getBatteryChemistry('lead_acid');
-      expect(result.defaultMaxDoD).toBe(0.50);
-      expect(result.defaultRoundTripEfficiency).toBe(0.82);
+      expect(result.dod).toBe(0.50);
+      expect(result.rte).toBe(0.82);
     });
 
     it('should default to LFP for unknown', () => {
@@ -55,7 +55,7 @@ describe('Battery Calculations', () => {
       const result = simulateSOC({
         ...baseConfig,
         hourlySolarOutput: new Array(24).fill(0),
-        hourlyLoadDemand: new Array(24).fill(1000), // 1kW constant load
+        hourlyLoadDemand: new Array(24).fill(1000),
       });
       expect(result.hourlySoc[23]).toBeLessThan(10);
     });
@@ -64,7 +64,7 @@ describe('Battery Calculations', () => {
       const result = simulateSOC({
         ...baseConfig,
         initialSocKwh: 5,
-        hourlySolarOutput: new Array(24).fill(1000), // 1kW constant solar
+        hourlySolarOutput: new Array(24).fill(1000),
         hourlyLoadDemand: new Array(24).fill(0),
       });
       expect(result.hourlySoc[23]).toBeGreaterThan(5);
@@ -74,9 +74,9 @@ describe('Battery Calculations', () => {
       const result = simulateSOC({
         ...baseConfig,
         hourlySolarOutput: new Array(24).fill(0),
-        hourlyLoadDemand: new Array(24).fill(5000), // Heavy load
+        hourlyLoadDemand: new Array(24).fill(5000),
       });
-      const minAllowed = 10 * (1 - 0.9); // 1 kWh
+      const minAllowed = 10 * (1 - 0.9);
       expect(result.hourlySoc[23]).toBeGreaterThanOrEqual(minAllowed - 0.1);
     });
 
@@ -85,10 +85,8 @@ describe('Battery Calculations', () => {
         ...baseConfig,
         blackoutHours: 48,
         hourlySolarOutput: new Array(24).fill(0),
-        hourlyLoadDemand: new Array(24).fill(2000), // 2kW load
+        hourlyLoadDemand: new Array(24).fill(2000),
       });
-      // 10kWh usable, 90% DoD = 9kWh available
-      // 2kW load = 4.5 hours until depletion
       expect(result.hoursUntilDepletion).toBeLessThan(10);
     });
   });
@@ -113,7 +111,6 @@ describe('Battery Calculations', () => {
         maxDoD: 0.9,
         blackoutsPerYear: 4,
       });
-      // Phase 2: Now returns yearsFromCycling instead of estimatedYearsRemaining
       expect(result.yearsFromCycling).toBeGreaterThan(0);
     });
 
@@ -125,7 +122,7 @@ describe('Battery Calculations', () => {
         maxDoD: 0.9,
         blackoutsPerYear: 4,
       });
-      expect(result.disclaimer).toContain('rough estimate');
+      expect(result.disclaimer).toContain('Estimates');
     });
   });
 

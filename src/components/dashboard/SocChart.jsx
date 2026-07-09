@@ -1,130 +1,60 @@
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ReferenceLine,
-  ResponsiveContainer,
-} from 'recharts';
-import { theme } from '../../theme/tokens.js';
+const SocChart = ({ results }) => {
+  if (!results?.al?.soc) return null;
+  const soc = results.al.soc;
+  const capacity = results.us || 0;
+  const critSoc = results.cl?.soc || [];
+  if (capacity === 0 || soc.length === 0) return null;
 
-function formatHour(hour) {
-  const h = hour % 24;
-  if (h === 0) return '12am';
-  if (h === 12) return '12pm';
-  if (h < 12) return `${h}am`;
-  return `${h - 12}pm`;
-}
-
-function CustomTooltip({ active, payload, label }) {
-  if (!active || !payload) return null;
+  const hrs = Math.min(results.cfg?.hrs || soc.length, 72);
+  const socAll = Array.from({ length: hrs }, (_, h) => soc[h % 24] || 0);
+  const socCrit = Array.from({ length: hrs }, (_, h) => critSoc[h % 24] || 0);
+  const maxSoc = Math.max(...socAll);
+  const minSoc = Math.min(...socAll);
+  const physics = results.al.physics;
 
   return (
-    <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-100">
-      <p className="text-sm font-medium text-gray-900 mb-1">
-        Hour {label} ({formatHour(label)})
-      </p>
-      {payload.map((entry, index) => (
-        <p key={index} className="text-sm" style={{ color: entry.color }}>
-          {entry.name}: {entry.value?.toFixed(2)} kWh
-        </p>
-      ))}
+    <div className="bg-white dm-surface rounded-xl shadow-card border border-slate-100 dm-border p-4 animate-fade-up">
+      <h3 className="font-bold text-slate-900 dm-text mb-1">Battery State of Charge</h3>
+      <p className="text-xs text-slate-500 dm-text-muted mb-3">SOC over {hrs}h. Peukert-adjusted capacity shown.</p>
+      <div className="h-36 relative">
+        <svg viewBox="0 0 600 140" className="w-full h-full" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="soc-all-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.5} />
+              <stop offset="100%" stopColor="#f43f5e" stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
+          {socAll.map((v, i) => {
+            const x = (i / (hrs - 1)) * 580 + 10;
+            const h = (v / capacity) * 120;
+            const critH = socCrit[i] ? (socCrit[i] / capacity) * 120 : 0;
+            return (
+              <g key={i}>
+                <rect x={x - 2} y={130 - h} width={Math.max(1, 580 / hrs - 1)} height={h} fill="#f43f5e" opacity={0.3 + (v / capacity) * 0.7} rx={1} />
+                {critH > 0 && (
+                  <rect x={x - 2} y={130 - critH} width={Math.max(1, 580 / hrs - 1)} height={critH} fill="#e11d48" opacity={0.4} rx={1} />
+                )}
+              </g>
+            );
+          })}
+          <line x1={10} y1={130} x2={590} y2={130} stroke="#e2e8f0" strokeWidth={1} />
+        </svg>
+      </div>
+      <div className="flex justify-between text-[10px] text-slate-500 dm-text-muted mt-2 tabular">
+        <span>Min: {minSoc.toFixed(1)} kWh</span>
+        <span>Max: {maxSoc.toFixed(1)} kWh</span>
+      </div>
+      <div className="flex gap-4 text-[10px] text-slate-500 dm-text-muted mt-1">
+        <span><span className="inline-block w-2 h-2 bg-crit-500 rounded mr-1" />All Loads</span>
+        <span><span className="inline-block w-2 h-2 rounded mr-1" style={{ backgroundColor: '#e11d48' }} />Critical Only</span>
+      </div>
+      {physics && (
+        <div className="text-[10px] text-slate-400 dm-text-muted mt-1 tabular">
+          Temp derate: {(physics.tempD * 100).toFixed(1)}% · Max charge: {(physics.maxCh || 0).toFixed(0)}W · Max discharge: {(physics.maxDis || 0).toFixed(0)}W
+        </div>
+      )}
     </div>
   );
-}
+};
 
-export default function SocChart({ results }) {
-  if (!results) return null;
-
-  const { allLoads, criticalLoads, usableCapacityKwh, config: simConfig } = results;
-  const dodFloor = usableCapacityKwh * (1 - (simConfig.battery?.maxDoD || 0.92));
-
-  // Extend to show full blackout duration if > 24 hours
-  const extendedData = [];
-  const totalHours = simConfig.blackoutHours || 72;
-  
-  for (let hour = 0; hour < totalHours; hour++) {
-    const hourOfDay = hour % 24;
-    extendedData.push({
-      hour,
-      allLoads: allLoads.hourlySoc[hourOfDay] || 0,
-      criticalLoads: criticalLoads?.hourlySoc[hourOfDay] || 0,
-      dodFloor,
-    });
-  }
-
-  return (
-    <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">Battery State of Charge</h3>
-        <p className="text-sm text-gray-600">
-          SOC over {totalHours}-hour blackout simulation. Red line shows maximum depth of discharge floor.
-        </p>
-      </div>
-
-      <div className="h-80" role="img" aria-label="Battery state of charge chart showing SOC over blackout duration for all loads and critical loads">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={extendedData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis
-              dataKey="hour"
-              tickFormatter={formatHour}
-              tick={{ fontSize: 12 }}
-              interval={Math.floor(totalHours / 12)}
-            />
-            <YAxis
-              tick={{ fontSize: 12 }}
-              tickFormatter={(value) => `${value.toFixed(1)}`}
-              domain={[0, usableCapacityKwh]}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            <ReferenceLine
-              y={dodFloor}
-              stroke={theme.colors.danger}
-              strokeDasharray="5 5"
-              label={{ value: `DoD Floor (${dodFloor.toFixed(1)} kWh)`, position: 'right' }}
-            />
-            <Line
-              type="monotone"
-              dataKey="allLoads"
-              name="All Loads"
-              stroke={theme.colors.chart.load}
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="criticalLoads"
-              name="Critical Loads Only"
-              stroke={theme.colors.chart.critical}
-              strokeWidth={2}
-              strokeDasharray="5 5"
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="mt-4 flex items-center gap-4 text-sm">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-0.5 bg-red-500" />
-          <span className="text-gray-600">All Loads</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-0.5 bg-red-700 border-dashed" style={{ borderTop: '2px dashed' }} />
-          <span className="text-gray-600">Critical Loads Only</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-0.5 bg-red-500" style={{ borderTop: '2px dashed' }} />
-          <span className="text-gray-600">Max DoD Floor</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+export default SocChart;

@@ -1,218 +1,73 @@
-import { useState, useEffect, useRef } from 'react';
-import { BATTERY_CHEMISTRY } from '../../engine/battery.js';
+import { CHEM } from '../../engine/battery.js';
 
-export default function BatteryForm({ config, onChange }) {
-  const [errors, setErrors] = useState({});
-  const prevChemistryRef = useRef(config.chemistry);
-  const prevDoDRef = useRef(config.maxDoD);
-  const prevEffRef = useRef(config.roundTripEfficiency);
+function HeatSlider({ value, min, max, onChange, ariaLabel }) {
+  const frac = Math.max(0, Math.min(1, (value - min) / (max - min || 1)));
+  const pct = (frac * 100).toFixed(2) + '%';
+  const lerp = (a, b, t) => Math.round(a + (b - a) * t);
+  const blue = [59, 130, 246], red = [244, 63, 94];
+  const r = lerp(blue[0], red[0], frac), g = lerp(blue[1], red[1], frac), b = lerp(blue[2], red[2], frac);
+  const heatColor = 'rgb(' + r + ',' + g + ',' + b + ')';
+  return (
+    <input
+      type="range" value={value} min={min} max={max} onChange={onChange} aria-label={ariaLabel}
+      className="w-full heat-slider"
+      style={{
+        '--heat-pct': pct,
+        '--heat-color': heatColor,
+        background: 'linear-gradient(to right, ' + heatColor + ' 0%, ' + heatColor + ' ' + pct + ', #e2e8f0 ' + pct + ', #e2e8f0 100%)'
+      }}
+    />
+  );
+}
 
-  const handleChange = (field, value) => {
-    const newConfig = { ...config, [field]: value };
-    onChange(newConfig);
-    
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: null }));
-    }
-  };
-
-  // Update defaults when chemistry changes
-  useEffect(() => {
-    const prevChemistry = prevChemistryRef.current;
-    const prevDoD = prevDoDRef.current;
-    const prevEff = prevEffRef.current;
-    prevChemistryRef.current = config.chemistry;
-    prevDoDRef.current = config.maxDoD;
-    prevEffRef.current = config.roundTripEfficiency;
-    if (prevChemistry === config.chemistry) return;
-    
-    if (config.chemistry) {
-      const chemistry = BATTERY_CHEMISTRY[config.chemistry.toUpperCase()];
-      const prevChem = prevChemistry ? BATTERY_CHEMISTRY[prevChemistry.toUpperCase()] : null;
-      if (chemistry) {
-        const newConfig = { ...config };
-        if (prevDoD === undefined || (prevChem && prevDoD === prevChem.defaultMaxDoD)) {
-          newConfig.maxDoD = chemistry.defaultMaxDoD;
-        }
-        if (prevEff === undefined || (prevChem && prevEff === prevChem.defaultRoundTripEfficiency)) {
-          newConfig.roundTripEfficiency = chemistry.defaultRoundTripEfficiency;
-        }
-        if (newConfig.maxDoD !== config.maxDoD || newConfig.roundTripEfficiency !== config.roundTripEfficiency) {
-          onChange(newConfig);
-        }
-      }
-    }
-  }, [config, onChange]);
-
-  const chemistry = config.chemistry ? BATTERY_CHEMISTRY[config.chemistry.toUpperCase()] : BATTERY_CHEMISTRY.LFP;
-  const usableCapacityKwh = (config.capacityKwh || 0) * (config.maxDoD || 0.92);
+export default function BatteryForm({ cfg, set }) {
+  const ch = CHEM[cfg.chem] || CHEM.lfp;
+  const us = (cfg.cap || 0) * (cfg.dod || 0.92);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-up">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Battery Configuration</h3>
-        <p className="text-sm text-gray-600 mb-4">
-          Configure your battery storage system. The simulation applies round-trip 
-          efficiency losses at the charge step (standard convention).
-        </p>
+        <h3 className="text-xl font-bold text-slate-900 dm-text">Battery Configuration</h3>
+        <p className="text-sm text-slate-500 dm-text-muted mt-1">RTE applied at charge step.</p>
       </div>
 
-      {/* Chemistry Selection */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Battery Chemistry
-        </label>
+        <label className="block text-sm font-semibold text-slate-700 dm-text mb-2">Chemistry</label>
         <div className="grid grid-cols-2 gap-3">
-          {Object.entries(BATTERY_CHEMISTRY).map(([key, chem]) => (
-            <label
-              key={key}
-              className={`flex flex-col p-4 rounded-lg border cursor-pointer transition-colors duration-150 ${
-                config.chemistry === chem.id
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 hover:border-gray-300 bg-white'
-              }`}
-            >
-              <input
-                type="radio"
-                name="chemistry"
-                value={chem.id}
-                checked={config.chemistry === chem.id}
-                onChange={(e) => handleChange('chemistry', e.target.value)}
-                className="sr-only"
-              />
-              <span className="text-sm font-medium text-gray-900">{chem.name}</span>
-              <span className="text-xs text-gray-500 mt-1">
-                {chem.id === 'lfp' ? 'Deep cycle, long life' : 'Traditional, lower cost'}
-              </span>
-              <div className="mt-2 text-xs text-gray-600">
-                <div>Max DoD: {chem.defaultMaxDoD * 100}%</div>
-                <div>Efficiency: {chem.defaultRoundTripEfficiency * 100}%</div>
-                <div>~{chem.cycleLifeAt50DoD.toLocaleString()} cycles at 50% DoD</div>
+          {Object.values(CHEM).map(c => (
+            <label key={c.id} className={`flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-all duration-150 ${cfg.chem === c.id ? 'border-brand-400 bg-brand-50 shadow-card' : 'border-slate-100 dm-border bg-white dm-surface hover:border-slate-200 hover:shadow-card'}`}>
+              <input type="radio" name="chem" value={c.id} checked={cfg.chem === c.id} onChange={e => set({ ...cfg, chem: e.target.value })} className="sr-only" />
+              <span className="font-semibold text-slate-900 dm-text text-sm">{c.name}</span>
+              <div className="text-[11px] text-slate-500 dm-text-muted mt-1.5 space-y-0.5">
+                <div>DoD {c.dod * 100}% · Eff {c.rte * 100}%</div>
+                <div>Cycles: {c.l80.toLocaleString()} @80%</div>
               </div>
             </label>
           ))}
         </div>
       </div>
 
-      {/* Capacity */}
       <div>
-        <label htmlFor="capacity" className="block text-sm font-medium text-gray-700 mb-2">
-          Usable Capacity (kWh)
-        </label>
-        <input
-          type="number"
-          id="capacity"
-          value={config.capacityKwh || ''}
-          onChange={(e) => handleChange('capacityKwh', parseFloat(e.target.value) || 0)}
-          min="0.1"
-          max="100"
-          step="0.1"
-          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-150 ${
-            errors.capacityKwh ? 'border-red-500' : 'border-gray-300'
-          }`}
-          aria-describedby={errors.capacityKwh ? 'capacity-error' : 'capacity-help'}
-        />
-        {errors.capacityKwh && (
-          <p id="capacity-error" className="mt-1 text-sm text-red-600" role="alert">
-            {errors.capacityKwh}
-          </p>
-        )}
-        <p id="capacity-help" className="mt-1 text-xs text-gray-500">
-          Enter the usable capacity (nameplate × max DoD). Typical home batteries: 5-15 kWh.
-        </p>
+        <label className="block text-sm font-semibold text-slate-700 dm-text mb-1.5">Capacity (kWh)</label>
+        <input type="number" value={cfg.cap || ''} onChange={e => set({ ...cfg, cap: parseFloat(e.target.value) || 0 })} min={0.1} step={0.1}
+          className="w-full px-3 py-2.5 border border-slate-200 dm-border rounded-lg bg-white dm-surface text-sm tabular focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-shadow duration-150 ease-out" />
+        <p className="text-xs text-slate-400 dm-text-muted mt-1.5">Typical 5-15 kWh</p>
       </div>
 
-      {/* Nameplate vs Usable Explanation */}
-      {config.capacityKwh > 0 && (
-        <div className="p-3 bg-gray-50 rounded-lg text-sm">
-          <div className="text-gray-700">
-            <strong>Nameplate Capacity:</strong>{' '}
-            {(config.capacityKwh / (config.maxDoD || 0.92)).toFixed(2)} kWh
-          </div>
-          <div className="text-gray-700">
-            <strong>Max DoD:</strong> {((config.maxDoD || 0.92) * 100).toFixed(0)}%
-          </div>
-          <div className="text-gray-900 font-medium">
-            <strong>Usable Capacity:</strong> {usableCapacityKwh.toFixed(2)} kWh
-          </div>
+      {cfg.cap > 0 && (
+        <div className="p-3 bg-bat-50 border border-bat-200 rounded-lg text-sm text-bat-700 font-medium">
+          <b>Usable: </b>{us.toFixed(2)} kWh
         </div>
       )}
 
-      {/* Max Depth of Discharge */}
       <div>
-        <label htmlFor="maxDoD" className="block text-sm font-medium text-gray-700 mb-2">
-          Max Depth of Discharge (DoD)
-        </label>
-        <input
-          type="range"
-          id="maxDoD"
-          value={(config.maxDoD || 0.92) * 100}
-          onChange={(e) => handleChange('maxDoD', parseInt(e.target.value) / 100)}
-          min="10"
-          max="100"
-          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-          aria-describedby="maxDoD-help"
-        />
-        <div className="flex justify-between text-xs text-gray-500 mt-1">
-          <span>10%</span>
-          <span className="font-medium text-gray-700">{((config.maxDoD || 0.92) * 100).toFixed(0)}%</span>
-          <span>100%</span>
-        </div>
-        <p id="maxDoD-help" className="mt-2 text-xs text-gray-500">
-          Maximum discharge depth. Lower values extend battery life but reduce usable capacity.
-          {config.chemistry === 'lead_acid' && (
-            <span className="text-amber-600"> Lead-acid batteries should not exceed 50% DoD for longevity.</span>
-          )}
-        </p>
+        <label className="block text-sm font-semibold text-slate-700 dm-text mb-2">Max DoD: {((cfg.dod || 0.92) * 100).toFixed(0)}%</label>
+        <HeatSlider value={(cfg.dod || 0.92) * 100} min={10} max={100} onChange={e => set({ ...cfg, dod: +e.target.value / 100 })} ariaLabel="Max depth of discharge" />
       </div>
 
-      {/* Round-Trip Efficiency */}
       <div>
-        <label htmlFor="rte" className="block text-sm font-medium text-gray-700 mb-2">
-          Round-Trip Efficiency (%)
-        </label>
-        <input
-          type="range"
-          id="rte"
-          value={(config.roundTripEfficiency || 0.95) * 100}
-          onChange={(e) => handleChange('roundTripEfficiency', parseInt(e.target.value) / 100)}
-          min="70"
-          max="100"
-          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-          aria-describedby="rte-help"
-        />
-        <div className="flex justify-between text-xs text-gray-500 mt-1">
-          <span>70%</span>
-          <span className="font-medium text-gray-700">{((config.roundTripEfficiency || 0.95) * 100).toFixed(0)}%</span>
-          <span>100%</span>
-        </div>
-        <p id="rte-help" className="mt-2 text-xs text-gray-500">
-          Efficiency of charge → discharge cycle. Losses occur as heat during conversion.
-          LFP typically 95%, Lead-Acid typically 80-85%.
-        </p>
-      </div>
-
-      {/* Battery Info Summary */}
-      <div className="p-4 bg-blue-50 rounded-lg">
-        <h4 className="text-sm font-medium text-blue-900 mb-2">Battery Summary</h4>
-        <div className="grid grid-cols-2 gap-2 text-sm text-blue-800">
-          <div>
-            <span className="text-blue-600">Chemistry:</span>{' '}
-            {chemistry?.name || 'Not selected'}
-          </div>
-          <div>
-            <span className="text-blue-600">Usable Capacity:</span>{' '}
-            {usableCapacityKwh.toFixed(2)} kWh
-          </div>
-          <div>
-            <span className="text-blue-600">Max Discharge:</span>{' '}
-            {(usableCapacityKwh * (config.maxDoD || 0.92)).toFixed(2)} kWh
-          </div>
-          <div>
-            <span className="text-blue-600">Cycle Life:</span>{' '}
-            ~{(chemistry?.cycleLifeAt50DoD || 6000).toLocaleString()} cycles
-          </div>
-        </div>
+        <label className="block text-sm font-semibold text-slate-700 dm-text mb-2">Round-Trip Eff: {((cfg.rte || 0.95) * 100).toFixed(0)}%</label>
+        <HeatSlider value={(cfg.rte || 0.95) * 100} min={70} max={100} onChange={e => set({ ...cfg, rte: +e.target.value / 100 })} ariaLabel="Round-trip efficiency" />
       </div>
     </div>
   );

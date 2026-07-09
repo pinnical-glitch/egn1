@@ -1,319 +1,44 @@
 /**
- * Appliance Library - Preset household appliances with typical power ratings
- * 
- * Each appliance includes:
- * - ratedWatts: Typical running power consumption
- * - surgeWatts: Startup/surge power for motor-driven loads (2-3x rated)
- * - defaultHoursPerDay: Typical daily runtime (duty-cycle adjusted)
- * - priority: Critical, Important, or Optional
- * - category: For grouping in the UI
+ * Appliance Library - Matching all.html DEFAULT_APPS
  */
 
-export const PRIORITIES = {
-  CRITICAL: 'Critical',
-  IMPORTANT: 'Important',
-  OPTIONAL: 'Optional',
-};
-
-export const CATEGORIES = {
-  KITCHEN: 'Kitchen',
-  CLIMATE: 'Climate',
-  WATER: 'Water',
-  LIGHTING: 'Lighting',
-  ELECTRONICS: 'Electronics',
-  MEDICAL: 'Medical',
-  OTHER: 'Other',
-};
+export const PRIORITIES = { CRITICAL: 'Critical', IMPORTANT: 'Important', OPTIONAL: 'Optional' };
+export const CATEGORIES = { KITCHEN: 'Kitchen', CLIMATE: 'Climate', WATER: 'Water', LIGHTING: 'Lighting', ELECTRONICS: 'Electronics', MEDICAL: 'Medical', OTHER: 'Other' };
 
 export const DEFAULT_APPLIANCES = [
-  // Kitchen
-  {
-    id: 'fridge',
-    name: 'Refrigerator',
-    ratedWatts: 150,
-    surgeWatts: 450,
-    defaultHoursPerDay: 8.4, // ~35% duty cycle of 24h
-    priority: PRIORITIES.CRITICAL,
-    category: CATEGORIES.KITCHEN,
-    isMotorDriven: true,
-  },
-  {
-    id: 'freezer',
-    name: 'Chest Freezer',
-    ratedWatts: 100,
-    surgeWatts: 300,
-    defaultHoursPerDay: 6, // ~25% duty cycle
-    priority: PRIORITIES.IMPORTANT,
-    category: CATEGORIES.KITCHEN,
-    isMotorDriven: true,
-  },
-  {
-    id: 'microwave',
-    name: 'Microwave',
-    ratedWatts: 1000,
-    surgeWatts: 1000,
-    defaultHoursPerDay: 0.25, // 15 minutes
-    priority: PRIORITIES.IMPORTANT,
-    category: CATEGORIES.KITCHEN,
-    isMotorDriven: false,
-  },
-  {
-    id: 'dishwasher',
-    name: 'Dishwasher',
-    ratedWatts: 1800,
-    surgeWatts: 1800,
-    defaultHoursPerDay: 1,
-    priority: PRIORITIES.OPTIONAL,
-    category: CATEGORIES.KITCHEN,
-    isMotorDriven: false,
-  },
-  {
-    id: 'oven',
-    name: 'Electric Oven',
-    ratedWatts: 2500,
-    surgeWatts: 2500,
-    defaultHoursPerDay: 1,
-    priority: PRIORITIES.OPTIONAL,
-    category: CATEGORIES.KITCHEN,
-    isMotorDriven: false,
-  },
-  {
-    id: 'coffeemaker',
-    name: 'Coffee Maker',
-    ratedWatts: 900,
-    surgeWatts: 900,
-    defaultHoursPerDay: 0.5,
-    priority: PRIORITIES.OPTIONAL,
-    category: CATEGORIES.KITCHEN,
-    isMotorDriven: false,
-  },
-
-  // Climate
-  {
-    id: 'furnace_fan',
-    name: 'Furnace Fan',
-    ratedWatts: 750,
-    surgeWatts: 1500,
-    defaultHoursPerDay: 8,
-    priority: PRIORITIES.CRITICAL,
-    category: CATEGORIES.CLIMATE,
-    isMotorDriven: true,
-  },
-  {
-    id: 'ac_window',
-    name: 'Window AC Unit',
-    ratedWatts: 1200,
-    surgeWatts: 3600,
-    defaultHoursPerDay: 8,
-    priority: PRIORITIES.IMPORTANT,
-    category: CATEGORIES.CLIMATE,
-    isMotorDriven: true,
-  },
-  {
-    id: 'portable_heater',
-    name: 'Portable Space Heater',
-    ratedWatts: 1500,
-    surgeWatts: 1500,
-    defaultHoursPerDay: 6,
-    priority: PRIORITIES.IMPORTANT,
-    category: CATEGORIES.CLIMATE,
-    isMotorDriven: false,
-  },
-  {
-    id: 'ceiling_fan',
-    name: 'Ceiling Fan',
-    ratedWatts: 75,
-    surgeWatts: 150,
-    defaultHoursPerDay: 10,
-    priority: PRIORITIES.OPTIONAL,
-    category: CATEGORIES.CLIMATE,
-    isMotorDriven: true,
-  },
-
-  // Water
-  {
-    id: 'well_pump',
-    name: 'Well Pump',
-    ratedWatts: 1000,
-    surgeWatts: 2000,
-    defaultHoursPerDay: 2,
-    priority: PRIORITIES.CRITICAL,
-    category: CATEGORIES.WATER,
-    isMotorDriven: true,
-  },
-  {
-    id: 'sump_pump',
-    name: 'Sump Pump',
-    ratedWatts: 400,
-    surgeWatts: 1200,
-    defaultHoursPerDay: 1,
-    priority: PRIORITIES.CRITICAL,
-    category: CATEGORIES.WATER,
-    isMotorDriven: true,
-  },
-  {
-    id: 'water_heater',
-    name: 'Electric Water Heater',
-    ratedWatts: 4500,
-    surgeWatts: 4500,
-    defaultHoursPerDay: 3,
-    priority: PRIORITIES.IMPORTANT,
-    category: CATEGORIES.WATER,
-    isMotorDriven: false,
-  },
-
-  // Lighting
-  {
-    id: 'led_lights',
-    name: 'LED Lighting (whole house)',
-    ratedWatts: 50,
-    surgeWatts: 50,
-    defaultHoursPerDay: 6,
-    priority: PRIORITIES.CRITICAL,
-    category: CATEGORIES.LIGHTING,
-    isMotorDriven: false,
-  },
-  {
-    id: 'exterior_lights',
-    name: 'Exterior/Security Lights',
-    ratedWatts: 30,
-    surgeWatts: 30,
-    defaultHoursPerDay: 12,
-    priority: PRIORITIES.IMPORTANT,
-    category: CATEGORIES.LIGHTING,
-    isMotorDriven: false,
-  },
-
-  // Electronics
-  {
-    id: 'wifi_router',
-    name: 'WiFi Router',
-    ratedWatts: 12,
-    surgeWatts: 12,
-    defaultHoursPerDay: 24,
-    priority: PRIORITIES.CRITICAL,
-    category: CATEGORIES.ELECTRONICS,
-    isMotorDriven: false,
-  },
-  {
-    id: 'tv',
-    name: 'Television',
-    ratedWatts: 100,
-    surgeWatts: 100,
-    defaultHoursPerDay: 5,
-    priority: PRIORITIES.IMPORTANT,
-    category: CATEGORIES.ELECTRONICS,
-    isMotorDriven: false,
-  },
-  {
-    id: 'laptop',
-    name: 'Laptop Charger',
-    ratedWatts: 50,
-    surgeWatts: 50,
-    defaultHoursPerDay: 8,
-    priority: PRIORITIES.IMPORTANT,
-    category: CATEGORIES.ELECTRONICS,
-    isMotorDriven: false,
-  },
-  {
-    id: 'phone_charger',
-    name: 'Phone Charger',
-    ratedWatts: 10,
-    surgeWatts: 10,
-    defaultHoursPerDay: 4,
-    priority: PRIORITIES.IMPORTANT,
-    category: CATEGORIES.ELECTRONICS,
-    isMotorDriven: false,
-  },
-  {
-    id: 'desktop_computer',
-    name: 'Desktop Computer',
-    ratedWatts: 200,
-    surgeWatts: 200,
-    defaultHoursPerDay: 6,
-    priority: PRIORITIES.OPTIONAL,
-    category: CATEGORIES.ELECTRONICS,
-    isMotorDriven: false,
-  },
-
-  // Medical
-  {
-    id: 'cpap',
-    name: 'CPAP Machine',
-    ratedWatts: 30,
-    surgeWatts: 30,
-    defaultHoursPerDay: 8,
-    priority: PRIORITIES.CRITICAL,
-    category: CATEGORIES.MEDICAL,
-    isMotorDriven: false,
-  },
-  {
-    id: 'oxygen_concentrator',
-    name: 'Oxygen Concentrator',
-    ratedWatts: 350,
-    surgeWatts: 500,
-    defaultHoursPerDay: 12,
-    priority: PRIORITIES.CRITICAL,
-    category: CATEGORIES.MEDICAL,
-    isMotorDriven: true,
-  },
-  {
-    id: 'medical_fridge',
-    name: 'Medical Supply Fridge',
-    ratedWatts: 100,
-    surgeWatts: 300,
-    defaultHoursPerDay: 8,
-    priority: PRIORITIES.CRITICAL,
-    category: CATEGORIES.MEDICAL,
-    isMotorDriven: true,
-  },
-
-  // Other
-  {
-    id: 'garage_door',
-    name: 'Garage Door Opener',
-    ratedWatts: 350,
-    surgeWatts: 1050,
-    defaultHoursPerDay: 0.25, // 15 minutes
-    priority: PRIORITIES.OPTIONAL,
-    category: CATEGORIES.OTHER,
-    isMotorDriven: true,
-  },
-  {
-    id: 'washer',
-    name: 'Washing Machine',
-    ratedWatts: 500,
-    surgeWatts: 1000,
-    defaultHoursPerDay: 1,
-    priority: PRIORITIES.OPTIONAL,
-    category: CATEGORIES.OTHER,
-    isMotorDriven: true,
-  },
-  {
-    id: 'dryer',
-    name: 'Clothes Dryer',
-    ratedWatts: 2500,
-    surgeWatts: 2500,
-    defaultHoursPerDay: 1,
-    priority: PRIORITIES.OPTIONAL,
-    category: CATEGORIES.OTHER,
-    isMotorDriven: false,
-  },
+  { id: 'fridge', name: 'Refrigerator', w: 150, s: 450, h: 8.4, p: 'Critical', cat: 'Kitchen', m: true },
+  { id: 'freezer', name: 'Chest Freezer', w: 100, s: 300, h: 6, p: 'Important', cat: 'Kitchen', m: true },
+  { id: 'microwave', name: 'Microwave', w: 1000, s: 1000, h: 0.25, p: 'Important', cat: 'Kitchen', m: false },
+  { id: 'dishwasher', name: 'Dishwasher', w: 1800, s: 1800, h: 1, p: 'Optional', cat: 'Kitchen', m: false },
+  { id: 'oven', name: 'Electric Oven', w: 2500, s: 2500, h: 1, p: 'Optional', cat: 'Kitchen', m: false },
+  { id: 'coffeemaker', name: 'Coffee Maker', w: 900, s: 900, h: 0.5, p: 'Optional', cat: 'Kitchen', m: false },
+  { id: 'furnace', name: 'Furnace Fan', w: 750, s: 1500, h: 8, p: 'Critical', cat: 'Climate', m: true },
+  { id: 'ac', name: 'Window AC', w: 1200, s: 3600, h: 8, p: 'Important', cat: 'Climate', m: true },
+  { id: 'heater', name: 'Space Heater', w: 1500, s: 1500, h: 6, p: 'Important', cat: 'Climate', m: false },
+  { id: 'cfan', name: 'Ceiling Fan', w: 75, s: 150, h: 10, p: 'Optional', cat: 'Climate', m: true },
+  { id: 'well', name: 'Well Pump', w: 1000, s: 2000, h: 2, p: 'Critical', cat: 'Water', m: true },
+  { id: 'sump', name: 'Sump Pump', w: 400, s: 1200, h: 1, p: 'Critical', cat: 'Water', m: true },
+  { id: 'wh', name: 'Water Heater', w: 4500, s: 4500, h: 3, p: 'Important', cat: 'Water', m: false },
+  { id: 'led', name: 'LED Lighting', w: 50, s: 50, h: 6, p: 'Critical', cat: 'Lighting', m: false },
+  { id: 'ext', name: 'Exterior Lights', w: 30, s: 30, h: 12, p: 'Important', cat: 'Lighting', m: false },
+  { id: 'wifi', name: 'WiFi Router', w: 12, s: 12, h: 24, p: 'Critical', cat: 'Electronics', m: false },
+  { id: 'tv', name: 'Television', w: 100, s: 100, h: 5, p: 'Important', cat: 'Electronics', m: false },
+  { id: 'laptop', name: 'Laptop', w: 50, s: 50, h: 8, p: 'Important', cat: 'Electronics', m: false },
+  { id: 'phone', name: 'Phone Charger', w: 10, s: 10, h: 4, p: 'Important', cat: 'Electronics', m: false },
+  { id: 'desktop', name: 'Desktop PC', w: 200, s: 200, h: 6, p: 'Optional', cat: 'Electronics', m: false },
+  { id: 'cpap', name: 'CPAP Machine', w: 30, s: 30, h: 8, p: 'Critical', cat: 'Medical', m: false },
+  { id: 'o2', name: 'Oxygen Concentrator', w: 350, s: 500, h: 12, p: 'Critical', cat: 'Medical', m: true },
+  { id: 'medfr', name: 'Medical Fridge', w: 100, s: 300, h: 8, p: 'Critical', cat: 'Medical', m: true },
+  { id: 'garage', name: 'Garage Door', w: 350, s: 1050, h: 0.25, p: 'Optional', cat: 'Other', m: true },
+  { id: 'washer', name: 'Washer', w: 500, s: 1000, h: 1, p: 'Optional', cat: 'Other', m: true },
+  { id: 'dryer', name: 'Dryer', w: 2500, s: 2500, h: 1, p: 'Optional', cat: 'Other', m: false }
 ];
 
-/**
- * Create a new appliance with user-provided values
- */
 export function createAppliance({ name, ratedWatts, surgeWatts, hoursPerDay, priority, category }) {
   return {
     id: `custom_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    name,
-    ratedWatts,
-    surgeWatts: surgeWatts || ratedWatts, // Default to rated if not specified
-    defaultHoursPerDay: hoursPerDay,
-    priority: priority || PRIORITIES.OPTIONAL,
-    category: category || CATEGORIES.OTHER,
-    isMotorDriven: surgeWatts > ratedWatts * 1.5, // Auto-detect if surge is significantly higher
-    isCustom: true,
+    name, w: ratedWatts, s: surgeWatts || ratedWatts, h: hoursPerDay,
+    p: priority || 'Optional', cat: category || 'Other',
+    m: (surgeWatts || ratedWatts) > ratedWatts * 1.5
   };
 }

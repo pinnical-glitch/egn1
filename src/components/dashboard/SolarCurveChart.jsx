@@ -1,112 +1,47 @@
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
-import { theme } from '../../theme/tokens.js';
+const SolarCurveChart = ({ results }) => {
+  if (!results?.sc) return null;
+  const solar = results.sc;
+  const total = results.ds || 0;
+  const season = results.season || 'summer';
+  const cloud = results.cloud || 'typical';
 
-function formatHour(hour) {
-  const h = hour % 24;
-  if (h === 0) return '12am';
-  if (h === 12) return '12pm';
-  if (h < 12) return `${h}am`;
-  return `${h - 12}pm`;
-}
+  const pad = { t: 15, r: 15, b: 25, l: 40 };
+  const w = 500, h = 180;
+  const cw = w - pad.l - pad.r;
+  const ch = h - pad.t - pad.b;
+  const mx = Math.max(...solar) * 1.1 || 1;
 
-function CustomTooltip({ active, payload, label }) {
-  if (!active || !payload || !payload[0]) return null;
-
-  return (
-    <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-100">
-      <p className="text-sm font-medium text-gray-900 mb-1">
-        {formatHour(label)}
-      </p>
-      <p className="text-sm text-yellow-600">
-        Solar Output: {payload[0].value?.toFixed(0)} W
-      </p>
-    </div>
-  );
-}
-
-export default function SolarCurveChart({ results }) {
-  if (!results) return null;
-
-  const { hourlySolarOutput } = results;
-
-  // Prepare 24-hour data for a single representative day
-  const chartData = Array.from({ length: 24 }, (_, hour) => ({
-    hour,
-    output: hourlySolarOutput[hour] || 0,
+  const pts = solar.map((v, i) => ({
+    x: pad.l + (i / (solar.length - 1)) * cw,
+    y: pad.t + ch - (v / mx) * ch,
   }));
-
-  const maxOutput = Math.max(...chartData.map(d => d.output));
+  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p.x + ',' + p.y).join(' ');
+  const area = line + ' L' + pts[pts.length - 1].x + ',' + pad.t + 'h L' + pts[0].x + ',' + pad.t + ' Z';
 
   return (
-    <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">Solar Output Curve</h3>
-        <p className="text-sm text-gray-600">
-          Idealized clear-sky solar production across a representative day. 
-          Actual output varies with cloud cover and weather conditions.
-        </p>
-      </div>
-
-      <div className="h-64" role="img" aria-label="Solar output curve chart showing 24-hour clear-sky production profile">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-            <defs>
-              <linearGradient id="solarCurveGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={theme.colors.chart.solar} stopOpacity={0.9}/>
-                <stop offset="95%" stopColor={theme.colors.chart.solar} stopOpacity={0.2}/>
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis
-              dataKey="hour"
-              tickFormatter={formatHour}
-              tick={{ fontSize: 12 }}
-              interval={3}
-            />
-            <YAxis
-              tick={{ fontSize: 12 }}
-              tickFormatter={(value) => `${value}`}
-              domain={[0, maxOutput * 1.1]}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Area
-              type="monotone"
-              dataKey="output"
-              stroke={theme.colors.chart.solar}
-              fill="url(#solarCurveGradient)"
-              strokeWidth={2}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <span className="text-gray-600">Peak Output:</span>{' '}
-          <span className="font-medium text-yellow-600">
-            {maxOutput.toFixed(0)} W
-          </span>
-        </div>
-        <div>
-          <span className="text-gray-600">Daily Total:</span>{' '}
-          <span className="font-medium text-yellow-600">
-            {results.dailySolarEnergy?.toFixed(0)} Wh
-          </span>
-        </div>
-      </div>
-
-      <div className="mt-3 p-2 bg-amber-50 rounded text-xs text-amber-800">
-        <strong>Note:</strong> This is a sine-squared curve representing ideal clear-sky conditions. 
-        Real output depends on cloud cover, temperature, and seasonal variation.
+    <div className="bg-white dm-surface rounded-xl shadow-card border border-slate-100 dm-border p-4 animate-fade-up">
+      <h3 className="font-bold text-slate-900 dm-text mb-1">Solar Output Curve</h3>
+      <p className="text-xs text-slate-500 dm-text-muted mb-3">Season: {season} · Weather: {cloud}</p>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto">
+        <defs>
+          <linearGradient id="sc-lg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#fbbf24" stopOpacity={0.3} />
+            <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.05} />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#sc-lg)" />
+        <path d={line} fill="none" stroke="#fbbf24" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+        <g>
+          {[0, 6, 12, 18, 24].map(hour => (
+            <text key={hour} x={pad.l + (hour / 24) * cw} y={h - 5} fontSize={9} fill="#94a3b8" textAnchor="middle" fontFamily="Inter">{hour}h</text>
+          ))}
+        </g>
+      </svg>
+      <div className="mt-2 text-xs text-slate-500 dm-text-muted tabular">
+        Peak: {Math.max(...solar).toFixed(0)}W · Total: {total.toFixed(0)} Wh/day
       </div>
     </div>
   );
-}
+};
+
+export default SolarCurveChart;
