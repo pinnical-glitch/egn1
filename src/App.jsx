@@ -68,6 +68,15 @@ export default function App() {
   const optCancelRef = useRef(false);
   const optCacheRef = useRef(new Map());
 
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    try { return !localStorage.getItem('egn1-onboarded'); } catch { return false; }
+  });
+  const [onboardStep, setOnboardStep] = useState(0);
+  const dismissOnboarding = () => {
+    try { localStorage.setItem('egn1-onboarded', '1'); } catch {}
+    setShowOnboarding(false);
+  };
+
   const resetAll = () => {
     setCfg(DEFAULT_CFG_STATIC);
     setRes(null);
@@ -382,6 +391,7 @@ export default function App() {
           <button onClick={() => setSettingsOpen(true)} aria-label="Open settings" className="p-2.5 rounded-xl text-slate-500 dm-text-muted hover:text-brand-700 hover:bg-slate-100 dm-surface-2 transition-colors duration-150 flex-shrink-0">
             <GearIcon />
           </button>
+          <button onClick={() => { setOnboardStep(0); setShowOnboarding(true); }} aria-label="Show help" title="Show help" className="p-2.5 rounded-xl text-slate-500 dm-text-muted hover:text-brand-700 hover:bg-slate-100 dm-surface-2 transition-colors duration-150 flex-shrink-0 font-bold">?</button>
         </div>
       </header>
       <nav className="bg-white/90 dm-surface backdrop-blur-sm border-b border-slate-100 dm-border sticky top-[73px] z-10" aria-label="Progress">
@@ -431,6 +441,35 @@ export default function App() {
       <footer className="bg-white/90 dm-surface backdrop-blur-sm border-t border-slate-100 dm-border text-center py-3 text-xs text-slate-400 dm-text-muted">
         Estimates for planning. Consult a certified installer.
       </footer>
+
+      {showOnboarding && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-5 bg-slate-900/60 backdrop-blur-sm animate-fade-up" role="dialog" aria-modal="true" aria-label="Getting started">
+          <div className="bg-white dm-surface rounded-2xl shadow-elevated border border-slate-100 dm-border p-6 max-w-md w-full animate-scale-in">
+            {onboardStep === 0 ? (
+              <div className="flex flex-col items-center text-center gap-4 py-2">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dm-text-muted">Creator</div>
+                <div className="text-3xl font-bold bg-gradient-to-r from-brand-500 to-brand-700 bg-clip-text text-transparent">Andrew Fady</div>
+                <button onClick={() => setOnboardStep(1)} className="mt-2 w-full px-5 py-2.5 bg-brand-600 text-white font-semibold rounded-xl hover:bg-brand-700 text-sm shadow-card hover:shadow-elevated transition-all duration-200">Next</button>
+                <button onClick={dismissOnboarding} className="text-xs text-slate-400 dm-text-muted hover:text-slate-600 transition-colors duration-150">Skip</button>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-lg font-bold text-slate-900 dm-text mb-2">Welcome to the planner</h2>
+                <p className="text-sm text-slate-600 dm-text-muted leading-relaxed mb-3">
+                  Design a resilient home energy system and see how it survives a blackout.
+                </p>
+                <ul className="text-sm text-slate-600 dm-text-muted space-y-2 mb-4 list-disc pl-5">
+                  <li>Use the <strong>step tabs</strong> across the top to move through Home → Loads → Solar → Battery → Physics.</li>
+                  <li>Press <strong>Run Simulation</strong> to compute blackout survival, cost and charts.</li>
+                  <li>Open <strong>Optimize</strong> for a multi-objective search (cost vs. resilience vs. carbon).</li>
+                  <li>The <strong>gear</strong> opens settings (theme, reduced motion, compact numbers).</li>
+                </ul>
+                <button onClick={dismissOnboarding} className="w-full px-5 py-2.5 bg-brand-600 text-white font-semibold rounded-xl hover:bg-brand-700 text-sm shadow-card hover:shadow-elevated transition-all duration-200">Start exploring</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
